@@ -3,36 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>지원 관리 | 함께가요 용인</title>
+  <title>지원 관리 | Nubi</title>
   <link rel="stylesheet" href="./styles.css">
+  <script src="./mock-data.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
   <aside class="sidebar" aria-label="서비스 메뉴">
-    <div class="brand"><svg aria-hidden="true"><use href="#panel"/></svg> 함께가요 용인 <span class="notice" aria-label="알림 3개"><svg aria-hidden="true"><use href="#bell"/></svg><b>3</b></span></div>
-    <div class="prepare"><strong>＋</strong> 프로그램 신청 준비</div>
+    <div class="brand">
+      <button class="icon-button" id="toggle-menu" aria-label="메뉴 접기" aria-controls="sidebar-content" aria-expanded="true"><svg aria-hidden="true"><use href="#panel"/></svg></button>
+      <div class="brand-identity">
+        <span class="brand-mark" aria-hidden="true"><img src="./nubi-logo.png" alt="" width="34" height="34"></span>
+        <span class="brand-copy"><strong>Nubi</strong><small>다양한 복지 기회를 누비다</small></span>
+      </div>
+      <button class="notice icon-button" id="open-notifications" aria-label="알림함 열기" popovertarget="notification-panel"><svg aria-hidden="true"><use href="#bell"/></svg><b id="unread-count" aria-hidden="true">3</b></button>
+    </div>
+    <div id="sidebar-content"><a class="prepare" href="#prepare"><strong>＋</strong> 프로그램 신청 준비</a>
     <nav aria-label="주 메뉴">
-      <span><svg aria-hidden="true"><use href="#home"/></svg>참여 가능 프로그램</span>
-      <span><svg aria-hidden="true"><use href="#search"/></svg>프로그램 탐색</span>
-      <a href="./" aria-current="page"><svg aria-hidden="true"><use href="#users"/></svg>지원 관리</a>
-      <span><svg aria-hidden="true"><use href="#list"/></svg>신청 현황</span>
-      <span><svg aria-hidden="true"><use href="#flag"/></svg>행사 관리</span>
-      <span><svg aria-hidden="true"><use href="#map"/></svg>사각지대 지도</span>
+      <a href="#eligible" data-page="eligible"><svg aria-hidden="true"><use href="#home"/></svg>참여 가능 프로그램</a>
+      <a href="#programs" data-page="programs"><svg aria-hidden="true"><use href="#search"/></svg>프로그램 탐색</a>
+      <a href="#support" data-page="support" aria-current="page"><svg aria-hidden="true"><use href="#users"/></svg>지원 관리</a>
+      <a href="#applications" data-page="applications"><svg aria-hidden="true"><use href="#list"/></svg>신청 현황</a>
+      <a href="#events" data-page="events"><svg aria-hidden="true"><use href="#flag"/></svg>행사 관리</a>
+      <a href="#map" data-page="map"><svg aria-hidden="true"><use href="#map-icon"/></svg>사각지대 지도</a>
     </nav>
     <section class="side-groups" aria-label="참여 그룹">
       <p>참여 그룹</p>
       <div id="group-links"></div>
     </section>
+    </div>
     <div class="profile">
-      <span class="avatar">용</span>
-      <div><strong>용인 ○○ 주간보호센터</strong><small>담당자 최정원</small></div>
-      <svg aria-hidden="true"><use href="#sun"/></svg>
+      <span id="profile-avatar" class="avatar" aria-hidden="true">·</span>
+      <div><strong id="profile-organization">기관 정보 불러오는 중</strong><small id="profile-member">담당자 —</small></div>
+      <button class="icon-button" id="toggle-theme" aria-label="어두운 테마" aria-pressed="false"><svg aria-hidden="true"><use href="#sun"/></svg></button>
     </div>
   </aside>
 
   <main>
+    <section id="support-page" aria-labelledby="support-title">
     <header class="page-header">
-      <h1>지원 관리</h1>
+      <h1 id="support-title" tabindex="-1">지원 관리</h1>
       <div class="actions">
         <button id="add-care" class="pill">개별 케어 추가</button>
         <button id="add-group" class="pill primary">공통 지원 그룹 만들기</button>
@@ -45,7 +55,21 @@
 
     <div class="dashboard">
       <section id="groups-panel" aria-labelledby="groups-tab"></section>
-      <section id="care-panel" aria-labelledby="care-tab" hidden></section>
+      <section id="care-panel" aria-labelledby="care-tab" hidden>
+        <div class="care-filters">
+          <input id="care-search" type="search" placeholder="별칭이나 케어로 찾기" aria-label="별칭이나 케어로 찾기">
+          <select id="care-group-filter" aria-label="그룹 필터"></select>
+          <select id="care-category-filter" aria-label="케어 종류 필터"></select>
+          <span id="care-results-count" aria-live="polite"></span>
+        </div>
+        <div class="care-table-wrap">
+          <table class="care-table">
+            <thead><tr><th scope="col">별칭</th><th scope="col">소속 그룹</th><th scope="col">공통 지원 외 추가 케어</th><th scope="col">참여 판정</th></tr></thead>
+            <tbody id="care-rows"></tbody>
+          </table>
+        </div>
+        <p class="care-hint">개별 케어는 소속 그룹의 공통 지원에 더해져요. 참여 가능 목록에서 이 사람이 함께 갈 때 확인할 점을 알려줘요.</p>
+      </section>
       <aside class="overview" aria-label="기관 요약">
         <section class="card summary">
           <h2>기관 전체</h2>
@@ -58,12 +82,72 @@
         </section>
       </aside>
     </div>
+    </section>
+    <section id="other-page" hidden aria-labelledby="other-title">
+      <h1 id="other-title" tabindex="-1"></h1>
+      <div id="other-content"></div>
+    </section>
   </main>
+
+  <section id="notification-panel" class="notification-panel" popover aria-labelledby="notification-title">
+    <header class="notification-header">
+      <h2 id="notification-title">알림</h2>
+      <span class="notification-live">실시간</span>
+      <button type="button" data-read-all>모두 읽음</button>
+    </header>
+    <div class="notification-filters" role="group" aria-label="알림 분류">
+      <button type="button" data-filter="all" aria-pressed="true">전체</button>
+      <button type="button" data-filter="application" aria-pressed="false">신청</button>
+      <button type="button" data-filter="receipt" aria-pressed="false">접수</button>
+      <button type="button" data-filter="program" aria-pressed="false">프로그램</button>
+    </div>
+    <ul id="notification-list" class="notification-list"></ul>
+    <p id="notification-error" role="alert"></p>
+    <button type="button" class="notification-history" aria-expanded="false">지난 알림 모두 보기</button>
+  </section>
+
+  <dialog id="details-dialog" aria-labelledby="details-title">
+    <h2 id="details-title"></h2>
+    <div id="details-content"></div>
+    <form method="dialog" class="actions"><button class="pill">닫기</button></form>
+  </dialog>
+
+  <dialog id="care-editor" aria-labelledby="care-editor-title">
+    <form id="care-form">
+      <header><h2 id="care-editor-title">개별 케어 추가</h2><button type="button" class="icon-button" data-close-care aria-label="닫기">×</button></header>
+      <div class="care-editor-body">
+        <label>별칭<input name="alias" required maxlength="20" pattern=".*\S.*" autofocus></label>
+        <label>소속 그룹<select name="groupId" id="care-editor-group"></select></label>
+        <section class="care-inherited" aria-labelledby="care-inherited-title">
+          <h3 id="care-inherited-title">그룹에서 이어받는 공통 지원</h3>
+          <div id="care-inherited-items"></div>
+        </section>
+        <section aria-labelledby="care-tag-title">
+          <h3 id="care-tag-title">추가로 필요한 케어</h3>
+          <div id="care-tag-category" class="care-tag-options" role="group" aria-labelledby="care-tag-title"></div>
+          <datalist id="care-tag-options"></datalist>
+        </section>
+        <section aria-labelledby="care-items-title">
+          <h3 id="care-items-title">케어 항목</h3>
+          <div id="care-editor-items"></div>
+          <button type="button" class="text-button link" id="care-add-item">＋ 항목 더하기</button>
+        </section>
+        <label>메모<textarea name="memo" rows="1" maxlength="1000"></textarea></label>
+        <label class="care-judgement"><span><strong>참여 판정에 반영</strong><small>맞지 않는 프로그램은 확인이 필요할 수 있어요.</small></span><input type="checkbox" name="applyToJudgement" role="switch" checked></label>
+      </div>
+      <p id="care-editor-error" role="alert"></p>
+      <footer class="actions"><button type="button" class="pill secondary" data-close-care>취소</button><button type="submit" class="pill primary">명단에 추가</button></footer>
+    </form>
+  </dialog>
 
   <dialog id="editor" aria-labelledby="editor-title">
     <form id="editor-form">
-      <h2 id="editor-title"></h2>
+      <header class="editor-heading">
+        <h2 id="editor-title"></h2>
+        <p id="group-editor-description" hidden>그룹 정보와 함께 필요한 지원 항목을 설정하세요.</p>
+      </header>
       <div id="editor-fields"></div>
+      <p id="editor-error" role="alert"></p>
       <div class="actions">
         <button class="pill" type="button" id="cancel">취소</button>
         <button class="pill primary" type="submit">저장</button>
@@ -79,7 +163,7 @@
     <symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M2 20v-2a7 7 0 0 1 14 0v2m0-16a3 3 0 0 1 0 6m3 3a6 6 0 0 1 3 5v2"/></symbol>
     <symbol id="list" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6m-6 4h6m-6 4h4"/></symbol>
     <symbol id="flag" viewBox="0 0 24 24"><path d="m4 10 14-6v14L4 14zm3 5 2 5h3l-2-4"/></symbol>
-    <symbol id="map" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zm6-3v15m6-12v15"/></symbol>
+    <symbol id="map-icon" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zm6-3v15m6-12v15"/></symbol>
     <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
   </svg>
 </body>

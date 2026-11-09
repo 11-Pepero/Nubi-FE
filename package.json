@@ -1,0 +1,7 @@
+{
+  "name": "nubi-fe",
+  "private": true,
+  "scripts": {
+    "dev": "node serve.mjs"
+  }
+}
