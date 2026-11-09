@@ -328,7 +328,6 @@ let unreadCount = 0;
 let notificationPage = 0;
 let notificationTotalPages = 0;
 let notificationBusy = false;
-let eligibleRequest = 0;
 
 async function loadActivity() {
   [programs, applications, events, places] = await Promise.all([
@@ -336,10 +335,13 @@ async function loadActivity() {
   ]);
 }
 
+let applicationProfile = {};
+
 async function loadProfile() {
   const { organizationName, memberName } = (await mockActivity.getProfile()) ?? {};
   const name = organizationName?.trim();
   const member = memberName?.trim();
+  applicationProfile = { name, member };
   byId('profile-avatar').textContent = name ? Array.from(name)[0] : '·';
   byId('profile-organization').textContent = name || '기관 정보 없음';
   byId('profile-member').textContent = member ? `담당자 ${member}` : '담당자 —';
@@ -384,7 +386,7 @@ const notificationTypes = {
   NEW_REVIEW: ['program', 'program'],
 };
 const applicationStatuses = {
-  PREPARING: '신청 준비', SUBMITTED: '접수 기다림', INQUIRY: '문의 있음',
+  PREPARING: '신청 준비', SUBMITTED: '접수 기다림', RECEIVED: '접수 완료', INQUIRY: '문의 있음',
   WAITING: '대기 중', CONFIRMED: '참여 예정', ATTENDED: '다녀왔어요',
   REJECTED: '거절', CANCELLED: '취소',
 };
@@ -439,28 +441,473 @@ function renderNotifications() {
   byId('notification-list').innerHTML = rows || '<li class="notification-empty">이 분류에 표시할 알림이 없어요.</li>';
 }
 
-async function renderProgramList(page, groupId, keyword = '') {
+function renderProgramList(keyword = '') {
   const list = byId('program-list');
-  const request = ++eligibleRequest;
-  const options = page === 'eligible' && groupId
-    ? (await mockActivity.getEligiblePrograms(groupId)).filter(item => item.result === 'ELIGIBLE').map(item => item.program)
-    : programs;
-  if (!list.isConnected || request !== eligibleRequest) return;
-  const filtered = options.filter(program =>
+  const filtered = programs.filter(program =>
     [program.title, venueLabel(program.venue)].some(value => value.includes(keyword.trim()))
   );
-  byId('program-list').innerHTML = filtered.map(program => `
+  list.innerHTML = filtered.map(program => `
     <article class="card">
       <h2>${escapeText(program.title)}</h2>
       <p class="page-meta">${escapeText(dateLabel(program.startAt))} · ${escapeText(venueLabel(program.venue))}</p>
       <button class="pill" data-program="${program.programId}">상세 보기</button>
-      <a class="pill primary" href="#prepare/${program.programId}${groupId ? `/${groupId}` : ''}">신청 준비</a>
+      <a class="pill primary" href="#prepare/${program.programId}">신청하기</a>
     </article>`).join('') || '<p class="empty">조건에 맞는 프로그램이 없어요.</p>';
+}
+
+const eligibilityFilters = [['ALL', '전체'], ['ELIGIBLE', '참여 가능'], ['NEEDS_REVIEW', '확인 필요']];
+
+function programSchedule(program) {
+  if (!program.startAt) return program.scheduleText ?? '일정 미정';
+  const date = new Date(program.startAt);
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(date);
+}
+
+function eligibleApplicationState({ program, result }, groupId) {
+  const alreadyApplied = applications.some(item =>
+    item.programId === program.programId && item.groupId === groupId &&
+    !['PREPARING', 'CANCELLED'].includes(item.status)
+  );
+  const direct = result === 'ELIGIBLE' && program.canApplyDirectly && !alreadyApplied;
+  return { direct, label: alreadyApplied ? '신청 준비' : '신청 불가' };
+}
+
+function programDeadline(program) {
+  const now = new Date();
+  const closesAt = new Date(program.applyUntil);
+  let deadline = null;
+  if (program.applyUntil && Number.isFinite(closesAt.getTime())) {
+    deadline = closesAt <= now ? -1 : Math.ceil((closesAt - now) / 86400000);
+    if (deadline > 0 && closesAt.toDateString() === now.toDateString()) deadline = 0;
+  }
+  return {
+    soon: deadline !== null && deadline >= 0 && deadline <= 3,
+    label: deadline === null ? '상시' : deadline < 0 ? '마감' : deadline === 0 ? 'D-day' : `D-${deadline}`,
+  };
+}
+
+function eligibleCard(item, groupId, selectedCare) {
+  const { program, result, review } = item;
+  const available = result === 'ELIGIBLE';
+  const action = eligibleApplicationState(item, groupId);
+  const deadline = programDeadline(program);
+  const person = selectedCare.find(item => item.id === review?.careId);
+  const details = [
+    ['calendar', programSchedule(program)],
+    ['pin', venueLabel(program.venue)],
+    ['users', program.capacity == null ? '정원 미정' : `정원 ${program.capacity}명`],
+  ];
+  return `<article class="card eligible-card">
+    <header class="eligible-card-meta">
+      <span>${escapeText(program.organizerName)}</span>
+      ${program.sharedWithOrganization ? '<span class="tag">우리 기관 공유</span>' : ''}
+      <strong class="${deadline.soon ? 'eligible-deadline soon' : ''}">${deadline.label}</strong>
+    </header>
+    <h2>${escapeText(program.title)}</h2>
+    <ul class="eligible-details">${details.map(([icon, label]) => `<li><svg aria-hidden="true"><use href="#${icon}"/></svg>${escapeText(label)}</li>`).join('')}</ul>
+    <div class="eligible-tags">${(program.accessibilityTags ?? []).map(label => `<span class="tag">${escapeText(label)}</span>`).join('')}</div>
+    ${review ? `<p class="eligible-review">${person ? `<strong>${escapeText(person.alias)}</strong> ` : ''}${escapeText(review.message)}</p>` : ''}
+    <footer>
+      <span class="eligible-result ${available ? '' : 'needs-review'}">${available ? '참여 가능' : '확인 필요'}</span>
+      <button class="text-button" type="button" data-eligible-details="${escapeText(program.programId)}">자세히 보기</button>
+      ${action.direct
+        ? `<a class="pill primary" href="#prepare/${encodeURIComponent(program.programId)}/${encodeURIComponent(groupId)}">신청하기</a>`
+        : `<button class="pill" type="button" disabled>${action.label}</button>`}
+    </footer>
+  </article>`;
+}
+
+const eligibleDetailDialog = byId('eligible-detail-dialog');
+
+function openEligibleDetails(item, group, selectedCare, trigger) {
+  const { program, result, review } = item;
+  const action = eligibleApplicationState(item, group.id);
+  const gallery = program.gallery?.length ? program.gallery : [{ alt: '등록된 프로그램 이미지가 없어요.' }];
+  const careReview = review ?? program.careAssessment;
+  const person = selectedCare.find(entry => entry.id === careReview?.careId);
+  const rows = group.supports.filter(support => program.supportAssessments?.[support.code])
+    .map(support => [support.quantity ? `${support.label} ${support.quantity}명` : support.label, program.supportAssessments[support.code]]);
+  const metadata = [
+    ['calendar', programSchedule(program)],
+    ['pin', venueLabel(program.venue)],
+    ['users', program.capacity == null ? null : `정원 ${program.capacity}명${program.remainingCapacity == null ? '' : ` · 남은 자리 ${program.remainingCapacity}`}`],
+    ['list', program.applyUntil ? `${dateLabel(program.applyUntil)} 마감` : null],
+  ];
+  const imageIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m4 18 5-5 3 3 4-5 4 5"/></svg>';
+  eligibleDetailDialog.innerHTML = `
+    <div class="eligible-detail-body">
+      <header class="eligible-detail-header">
+        <span>${escapeText(program.organizerName)}</span>
+        ${program.sharedWithOrganization ? '<span class="tag">우리 기관 공유</span>' : ''}
+        <strong>${programDeadline(program).label}</strong>
+        <form method="dialog">
+          <button class="icon-button eligible-detail-close" aria-label="닫기" autofocus>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+          </button>
+        </form>
+      </header>
+      <div class="eligible-detail-gallery">
+        <div class="eligible-detail-photo"></div>
+        <span class="eligible-detail-counter"></span>
+        ${gallery.length > 1 ? '<button type="button" data-step="-1" aria-label="이전 이미지">‹</button><button type="button" data-step="1" aria-label="다음 이미지">›</button>' : ''}
+      </div>
+      ${gallery.length > 1 ? `<div class="eligible-detail-thumbs">${gallery.map((photo, index) =>
+        `<button type="button" data-photo="${index}" aria-label="${escapeText(photo.alt ?? `이미지 ${index + 1}`)}">${photo.url ? `<img src="${escapeText(photo.url)}" alt="">` : imageIcon}</button>`
+      ).join('')}</div>` : ''}
+      <h2 id="eligible-detail-title">${escapeText(program.title)}</h2>
+      <ul class="eligible-details">${metadata.filter(([, label]) => label).map(([icon, label]) =>
+        `<li><svg aria-hidden="true"><use href="#${icon}"/></svg>${escapeText(label)}</li>`).join('')}</ul>
+      <section class="eligible-detail-match">
+        <header><h3>${escapeText(group.name)} ${escapeText(group.memberCount)}명 기준</h3>
+          <span class="eligible-result ${result === 'ELIGIBLE' ? '' : 'needs-review'}">${result === 'ELIGIBLE' ? '참여 가능' : '확인 필요'}</span></header>
+        ${rows.map(([label, description]) => `<div class="eligible-detail-check"><span aria-hidden="true">✓</span><strong>${escapeText(label)}</strong><small>${escapeText(description)}</small></div>`).join('')}
+        ${careReview && (review || person) ? `<div class="eligible-detail-check warning"><span aria-hidden="true">ⓘ</span><strong>${escapeText(person?.alias ?? '확인 필요')}</strong><small>${escapeText(careReview.message)}</small></div>` : ''}
+        ${rows.length || review || person ? '' : '<p>등록된 세부 지원 정보가 없어요.</p>'}
+      </section>
+      <section class="eligible-detail-facilities"><h3>편의시설</h3>
+        <div class="eligible-tags">${(program.accessibilityTags ?? []).map(tag => `<span class="tag">${escapeText(tag)}</span>`).join('') || '<p>등록된 편의시설 정보가 없어요.</p>'}</div>
+        ${program.description ? `<p>${escapeText(program.description)}</p>` : ''}
+      </section>
+      <label class="eligible-detail-inquiry" hidden>문의 문자<textarea rows="3"></textarea></label>
+    </div>
+    <footer class="eligible-detail-footer">
+      <button class="pill" type="button" data-inquiry>문의 문자 쓰기</button>
+      ${action.direct
+        ? `<a class="pill primary" href="#prepare/${encodeURIComponent(program.programId)}/${encodeURIComponent(group.id)}">${escapeText(group.name)}로 신청하기</a>`
+        : `<button class="pill" type="button" disabled>${action.label}</button>`}
+    </footer>`;
+
+  let currentPhoto = 0;
+  const photoFrame = eligibleDetailDialog.querySelector('.eligible-detail-photo');
+  const counter = eligibleDetailDialog.querySelector('.eligible-detail-counter');
+  const thumbnails = eligibleDetailDialog.querySelectorAll('[data-photo]');
+  function showPhoto(index) {
+    currentPhoto = (index + gallery.length) % gallery.length;
+    const photo = gallery[currentPhoto];
+    photoFrame.innerHTML = photo.url
+      ? `<img src="${escapeText(photo.url)}" alt="${escapeText(photo.alt)}">`
+      : `<span role="img" aria-label="${escapeText(photo.alt ?? '이미지 없음')}">${imageIcon}</span>`;
+    counter.textContent = `${currentPhoto + 1}/${gallery.length}`;
+    thumbnails.forEach((button, position) => button.setAttribute('aria-pressed', String(position === currentPhoto)));
+  }
+  eligibleDetailDialog.querySelectorAll('[data-step]').forEach(button => {
+    button.addEventListener('click', () => showPhoto(currentPhoto + Number(button.dataset.step)));
+  });
+  thumbnails.forEach(button => button.addEventListener('click', () => showPhoto(Number(button.dataset.photo))));
+  eligibleDetailDialog.querySelector('[data-inquiry]').addEventListener('click', () => {
+    const inquiry = eligibleDetailDialog.querySelector('.eligible-detail-inquiry');
+    const text = inquiry.querySelector('textarea');
+    if (inquiry.hidden) {
+      inquiry.hidden = false;
+      text.value = `안녕하세요. ${program.title}에 ${group.name} ${group.memberCount}명이 참여할 수 있는지 문의드립니다.`;
+    }
+    text.focus();
+  });
+  eligibleDetailDialog.querySelector('footer a')?.addEventListener('click', () => eligibleDetailDialog.close());
+  const card = trigger.closest('.eligible-card');
+  card.classList.add('eligible-card-selected');
+  eligibleDetailDialog.addEventListener('close', () => card.classList.remove('eligible-card-selected'), { once: true });
+  showPhoto(0);
+  eligibleDetailDialog.showModal();
+}
+
+eligibleDetailDialog.addEventListener('click', event => {
+  if (event.target === eligibleDetailDialog) eligibleDetailDialog.close();
+});
+
+function renderEligiblePage(groupId) {
+  const group = groups.find(item => item.id === groupId) ?? groups[0];
+  if (!group) {
+    otherContent.innerHTML = '<p class="empty">참여 그룹을 먼저 만들어 주세요.</p>';
+    return;
+  }
+  const groupCare = care.filter(item => item.groupId === group.id && item.applyToJudgement);
+  otherContent.innerHTML = `
+    <div class="eligible-controls">
+      <label class="eligible-search"><svg aria-hidden="true"><use href="#search"/></svg><input type="search" id="eligible-search" aria-label="프로그램 검색" placeholder="수영, 도예, 장애인의 날 행사"></label>
+      <div class="eligible-select${group.id === groupId ? ' is-selected' : ''}"><select id="eligible-group" aria-label="참여 그룹">${groups.map(item => `<option value="${escapeText(item.id)}" ${item.id === group.id ? 'selected' : ''}>${escapeText(item.name)} · ${escapeText(item.memberCount)}명</option>`).join('')}</select></div>
+      <details class="eligible-care">
+        <summary id="eligible-care-label"></summary>
+        <div>${groupCare.map(item => `<label><input type="checkbox" value="${escapeText(item.id)}" checked> ${escapeText(item.alias)}</label>`).join('') || '<p>반영할 개별 케어가 없어요.</p>'}</div>
+      </details>
+      <div class="eligible-select"><select id="eligible-period" aria-label="일정 범위"><option value="month">이번 달</option><option value="all">전체 일정</option></select></div>
+    </div>
+    <div class="eligible-context">
+      <div id="eligible-criteria" class="eligible-tags"></div>
+      <div id="eligible-filters" class="eligible-filters" role="group" aria-label="참여 판정 필터">${eligibilityFilters.map(([value, label]) =>
+        `<button type="button" data-result="${value}" aria-pressed="${value === 'ALL'}">${label} <span>0</span></button>`).join('')}</div>
+    </div>
+    <div id="eligible-grid" class="eligible-grid" aria-live="polite"></div>`;
+
+  const grid = byId('eligible-grid');
+  const search = byId('eligible-search');
+  const period = byId('eligible-period');
+  const filters = byId('eligible-filters');
+  const careControl = otherContent.querySelector('.eligible-care');
+  const careLabel = byId('eligible-care-label');
+  const criteria = byId('eligible-criteria');
+  const supportCodes = ['WHEELCHAIR', 'ACCESSIBLE_TOILET', 'COMPANION', 'EASY_LANGUAGE'];
+  const supportTags = group.supports.filter(item => supportCodes.includes(item.code));
+  let selectedCare = [];
+  let items = [];
+  let active = 'ALL';
+  let request = 0;
+  let loading = true;
+
+  grid.addEventListener('click', event => {
+    const button = event.target.closest('[data-eligible-details]');
+    if (!button) return;
+    const item = items.find(entry => entry.program.programId === Number(button.dataset.eligibleDetails));
+    if (item) openEligibleDetails(item, group, selectedCare, button);
+  });
+
+  function updateResults() {
+    const keyword = search.value.trim().toLocaleLowerCase('ko-KR');
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const matches = items.filter(({ program }) =>
+      (period.value === 'all' || !program.startAt || program.startAt.startsWith(month)) &&
+      [program.title, program.organizerName, venueLabel(program.venue)].some(value => value?.toLocaleLowerCase('ko-KR').includes(keyword))
+    );
+    for (const button of filters.querySelectorAll('button')) {
+      const { result } = button.dataset;
+      button.setAttribute('aria-pressed', String(result === active));
+      button.querySelector('span').textContent = matches.filter(item => result === 'ALL' || item.result === result).length;
+    }
+    if (loading) return;
+    grid.innerHTML = matches.filter(item => active === 'ALL' || item.result === active)
+      .map(item => eligibleCard(item, group.id, selectedCare)).join('') || '<p class="empty">조건에 맞는 프로그램이 없어요.</p>';
+  }
+
+  async function loadMatches() {
+    const currentRequest = ++request;
+    const careIds = [...careControl.querySelectorAll('input:checked')].map(input => Number(input.value));
+    selectedCare = groupCare.filter(item => careIds.includes(item.id));
+    careControl.classList.toggle('is-selected', careIds.length > 0);
+    careLabel.textContent = careIds.length ? `개별 케어 함께 보기 ${careIds.length}명` : '개별 케어 함께 보기';
+    criteria.innerHTML = '<span>이 조건으로 찾았어요</span>' +
+      supportTags.map(item => `<span class="tag">${escapeText(item.code === 'WHEELCHAIR' && item.quantity != null ? `휠체어 ${item.quantity}명` : item.code === 'COMPANION' && item.ratio ? `동반 ${item.ratio.replace(':', '명당 ')}명` : item.label)}</span>`).join('') +
+      (selectedCare.length ? `<span class="eligible-result">+ ${escapeText(selectedCare.map(item => item.alias).join(', '))}</span>` : '');
+    loading = true;
+    items = [];
+    grid.innerHTML = '<p class="empty">프로그램을 불러오는 중이에요.</p>';
+    updateResults();
+    try {
+      const response = await mockActivity.getEligiblePrograms(group.id, { careIds });
+      if (!grid.isConnected || currentRequest !== request) return;
+      items = response.items;
+      loading = false;
+      updateResults();
+    } catch {
+      if (grid.isConnected && currentRequest === request) {
+        grid.innerHTML = '<p class="empty">프로그램을 불러오지 못했어요.</p>';
+      }
+    }
+  }
+
+  byId('eligible-group').addEventListener('change', event => {
+    location.hash = `eligible/${event.target.value}`;
+  });
+  careControl.addEventListener('change', loadMatches);
+  search.addEventListener('input', updateResults);
+  period.addEventListener('change', updateResults);
+  filters.addEventListener('click', event => {
+    const button = event.target.closest('button[data-result]');
+    if (!button) return;
+    active = button.dataset.result;
+    updateResults();
+  });
+  loadMatches();
 }
 
 function groupOptions(selected) {
   return groups.map(group => `
     <option value="${group.id}" ${group.id === selected ? 'selected' : ''}>${escapeText(group.name)}</option>`).join('');
+}
+
+const receptionMethods = [['PHONE', '전화'], ['ONLINE', '온라인'], ['PAPER', '서면']];
+
+function renderApplicationPreparation(programId, groupId) {
+  const program = programs.find(item => item.programId === programId);
+  const group = groups.find(item => item.id === groupId) ?? groups[0];
+  if (!program || !group) {
+    if (!group || !programs.length) {
+      otherContent.innerHTML = `<p class="card">${group ? '신청을 준비할 프로그램이 없어요.' : '신청 준비를 시작하려면 지원 관리에서 참여 그룹을 만들어 주세요.'}</p>`;
+      return;
+    }
+    otherContent.innerHTML = `<form id="prepare-selection" class="card prepare-selection">
+      <header>
+        <span class="prepare-selection-icon" aria-hidden="true"><svg><use href="#list"/></svg></span>
+        <div><h2>프로그램과 참여 그룹 선택</h2>
+          <p>함께 갈 프로그램과 그룹을 선택하면 신청서 초안과 접수 안내를 볼 수 있어요.</p></div>
+      </header>
+      <div class="page-form">
+        <label>프로그램<select name="programId" required><option value="">프로그램을 선택해 주세요</option>
+          ${programs.map(item => `<option value="${item.programId}">${escapeText(item.title)}</option>`).join('')}
+        </select></label>
+        <label>참여 그룹<select name="groupId" required>${groupOptions(group.id)}</select></label>
+      </div>
+      <p id="prepare-selection-preview" aria-live="polite" hidden></p>
+      <button type="submit" class="pill primary">신청서 준비하기</button>
+    </form>`;
+    const selection = byId('prepare-selection');
+    const programSelect = selection.elements.programId;
+    const preview = byId('prepare-selection-preview');
+    programSelect.addEventListener('change', () => {
+      const selected = programs.find(item => item.programId === Number(programSelect.value));
+      preview.hidden = !selected;
+      preview.textContent = selected
+        ? [selected.organizerName, programSchedule(selected), venueLabel(selected.venue)].filter(Boolean).join(' · ')
+        : '';
+    });
+    selection.addEventListener('submit', event => {
+      event.preventDefault();
+      location.hash = `prepare/${encodeURIComponent(programSelect.value)}/${encodeURIComponent(selection.elements.groupId.value)}`;
+    });
+    return;
+  }
+
+  const method = receptionMethods.find(([value]) => value === program.applyMethod)?.[1] ?? '접수 방법 확인 필요';
+  const contact = program.applicationContact ?? {};
+  const participantCount = group.memberCount;
+  const wheelchairCount = group.supports.find(item => item.code === 'WHEELCHAIR')?.quantity;
+  const supportNeeds = group.supports.filter(item => ['WHEELCHAIR', 'ACCESSIBLE_TOILET', 'EASY_LANGUAGE'].includes(item.code))
+    .map(item => item.code === 'WHEELCHAIR' && wheelchairCount ? `휠체어 이용자 ${wheelchairCount}명 자리` : item.label);
+  const aliases = care.filter(item => item.groupId === group.id && item.applyToJudgement);
+  const quietCare = aliases.find(item => item.items.some(need => need.code === 'QUIET_SPACE'));
+  const review = quietCare ? program.applicationNotes : null;
+  const questions = [
+    wheelchairCount ? `휠체어 ${wheelchairCount}명 자리` : null,
+    review && quietCare ? `${quietCare.alias} · 조용한 자리` : null,
+  ].filter(Boolean);
+  const phone = String(contact.phone ?? '').replace(/[^\d+]/g, '');
+  const { name, member } = applicationProfile;
+
+  byId('other-title').hidden = true;
+  byId('other-page').setAttribute('aria-labelledby', 'prepare-title');
+  otherContent.innerHTML = `
+    <header class="prepare-heading">
+      <a class="icon-button" href="#eligible/${group.id}" aria-label="참여 가능 프로그램으로 돌아가기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></a>
+      <div><p>${escapeText([program.organizerName, method === '접수 방법 확인 필요' ? method : `${method} 접수`].filter(Boolean).join(' · '))}</p>
+        <h1 id="prepare-title" tabindex="-1">${escapeText(program.title)}</h1></div>
+      ${program.sourceUrl && /^https?:\/\//i.test(program.sourceUrl)
+        ? `<a class="pill" href="${escapeText(program.sourceUrl)}" target="_blank" rel="noopener">원문 보기</a>`
+        : `<button class="pill" type="button" data-program="${program.programId}">원문 보기</button>`}
+    </header>
+    <form id="application-form" class="prepare-layout" data-received="true">
+      <input type="hidden" name="programId" value="${program.programId}">
+      <input type="hidden" name="participantCount" value="${participantCount}">
+      <div class="prepare-main">
+        <section class="card">
+          <header class="prepare-row"><h2>함께 가는 사람</h2>
+            <select name="groupId" aria-label="참여 그룹">${groups.map(item => `<option value="${item.id}" ${item.id === group.id ? 'selected' : ''}>${escapeText(item.name)} · ${item.memberCount}명 + 동반 ${item.suggestedCompanionCount ?? 0}명</option>`).join('')}</select>
+          </header>
+          <div class="prepare-tags">
+            ${(program.accessibilityTags ?? []).map(tag => `<span class="eligible-result">공고에 있어요 · ${escapeText(tag)}</span>`).join('')}
+          </div>
+          <div class="prepare-tags">
+            ${questions.map(question => `<span class="eligible-result needs-review">물어봐야 해요 · ${escapeText(question)}</span>`).join('')}
+          </div>
+        </section>
+        <section class="prepare-document">
+          <header class="prepare-row"><h2><span class="prepare-sparkle" aria-hidden="true">✦</span> AI가 쓴 신청서</h2><div>
+            <button type="button" class="text-button" id="prepare-reset">다시 쓰기</button>
+            <button type="button" class="text-button link" id="prepare-print">PDF로 받기</button>
+          </div></header>
+          <div class="prepare-sheet">
+            <h2>프로그램 참가 신청서</h2>
+            <dl>
+              <div><dt>신청 기관</dt><dd>${escapeText(name ?? '—')}</dd></div>
+              <div><dt>담당자</dt><dd class="prepare-field"><span>${escapeText(member ?? '—')}</span><input type="tel" name="contact" aria-label="담당자 연락처" placeholder="직접 입력: 연락처"></dd></div>
+              <div><dt>참가 인원</dt><dd class="prepare-field">
+                <span>이용자 ${participantCount}명</span>
+                <label class="prepare-companions">동반 인력 <input type="number" name="companionCount" min="0" max="1000" value="${group.suggestedCompanionCount ?? 0}" required>명</label>
+                <span id="prepare-total"></span>
+              </dd></div>
+              <div><dt>필요한 지원</dt><dd>${escapeText(supportNeeds.join(', ') || '—')}</dd></div>
+              <div><dt>미리 여쭐 점</dt><dd><textarea name="notes" aria-label="미리 여쭐 점" rows="2">${escapeText(review ?? '')}</textarea></dd></div>
+            </dl>
+          </div>
+        </section>
+      </div>
+      <div class="prepare-side">
+        <section class="card">
+          <h2>접수하는 곳</h2>
+          <div class="prepare-methods" role="group" aria-label="접수 방법">${receptionMethods.map(([value, label]) =>
+            `<button type="button" data-method="${value}" aria-pressed="false">${label}</button>`).join('')}</div>
+          <div id="prepare-reception"></div>
+        </section>
+        <section class="card">
+          <h2><span class="prepare-sparkle" aria-hidden="true">✦</span> AI가 쓴 문의 문자</h2>
+          <p id="prepare-message" class="prepare-note"></p>
+          <div class="prepare-message-actions">
+            <button class="pill" type="button" id="prepare-copy">복사하기</button>
+            ${phone ? '<a class="pill" id="prepare-sms">문자로 보내기</a>' : ''}
+          </div>
+          <p id="prepare-copy-status" role="status"></p>
+        </section>
+        <button class="pill primary" type="submit">접수했어요, 완료로 표시</button>
+        <p id="application-error" role="alert"></p>
+      </div>
+    </form>`;
+
+  const form = byId('application-form');
+  const methods = [...form.querySelectorAll('[data-method]')];
+  const message = byId('prepare-message');
+  const sms = byId('prepare-sms');
+  const reception = byId('prepare-reception');
+  let selectedMethod = program.applyMethod;
+
+  function updateDraft() {
+    const companions = form.elements.companionCount.valueAsNumber || 0;
+    const total = participantCount + companions;
+    form.elements.groupId.selectedOptions[0].textContent = `${group.name} · ${participantCount}명 + 동반 ${companions}명`;
+    byId('prepare-total').textContent = `(총 ${total}명)`;
+    const notes = form.elements.notes.value.trim();
+    const supportQuestion = supportNeeds.length ? ` ${supportNeeds.join(', ')} 지원이 가능한지 알려 주실 수 있을까요?` : '';
+    const request = `${program.title}에 이용자 ${participantCount}명과 동반 ${companions}명이 함께 가려고 해요.`;
+    message.textContent = [name ? `안녕하세요, ${name}입니다.` : '안녕하세요.', request, supportQuestion.trim(), notes].filter(Boolean).join(' ');
+    if (sms) sms.href = `sms:${phone}?body=${encodeURIComponent(message.textContent)}`;
+    for (const button of methods) button.setAttribute('aria-pressed', String(button.dataset.method === selectedMethod));
+    if (selectedMethod === 'PHONE' && phone) {
+      reception.innerHTML = `<div class="prepare-note prepare-row">
+        <div class="prepare-phone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h4l2 5-3 2a12 12 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2Z"/></svg>
+          <div><small>${escapeText(contact.team)}</small><strong>${escapeText(contact.phone)}</strong></div>
+        </div><small>${escapeText(contact.hours)}</small>
+      </div>
+      <div class="prepare-note"><small>통화할 때 이렇게 말해요</small><p>${escapeText(`${program.title}에 ${total}명 신청하려고 해요.` + supportQuestion + (notes ? ` ${notes}` : ''))}</p></div>`;
+    } else {
+      reception.innerHTML = '<p class="prepare-note">이 접수 방법의 안내 정보가 없어요.</p>';
+    }
+  }
+
+  form.elements.groupId.addEventListener('change', event => {
+    location.hash = `prepare/${program.programId}/${event.target.value}`;
+  });
+  for (const button of methods) button.addEventListener('click', () => {
+    selectedMethod = button.dataset.method;
+    updateDraft();
+  });
+  form.addEventListener('input', event => {
+    if (event.target !== form.elements.groupId) updateDraft();
+  });
+  byId('prepare-reset').addEventListener('click', () => {
+    form.reset();
+    updateDraft();
+  });
+  byId('prepare-print').addEventListener('click', () => window.print());
+  byId('prepare-copy').addEventListener('click', async () => {
+    const status = byId('prepare-copy-status');
+    try {
+      await navigator.clipboard.writeText(message.textContent);
+      status.textContent = '문자를 복사했어요.';
+    } catch {
+      status.textContent = '복사할 수 없어요. 문자 내용을 직접 선택해 주세요.';
+    }
+  });
+  updateDraft();
 }
 
 function renderPage(focus = true) {
@@ -469,6 +916,11 @@ function renderPage(focus = true) {
   const page = Object.hasOwn(pageTitles, route) ? route : 'support';
   byId('support-page').hidden = page !== 'support';
   byId('other-page').hidden = page === 'support';
+  byId('other-title').hidden = false;
+  byId('other-page').setAttribute('aria-labelledby', 'other-title');
+  const prepareLink = document.querySelector('.sidebar .prepare');
+  if (page === 'prepare') prepareLink.setAttribute('aria-current', 'page');
+  else prepareLink.removeAttribute('aria-current');
   document.title = `${pageTitles[page]} | Nubi`;
   for (const link of document.querySelectorAll('nav [data-page]')) {
     if (link.dataset.page === page) link.setAttribute('aria-current', 'page');
@@ -483,28 +935,17 @@ function renderPage(focus = true) {
   }
 
   byId('other-title').textContent = pageTitles[page];
-  if (page === 'programs' || page === 'eligible') {
+  if (page === 'eligible') {
+    renderEligiblePage(Number(id));
+  } else if (page === 'programs') {
     otherContent.innerHTML = `
-      <div class="page-controls"><label>검색 <input id="program-search" type="search" placeholder="프로그램 또는 장소"></label>
-      ${page === 'eligible' ? `<label>참여 그룹 <select id="program-group"><option value="">전체 그룹</option>${groupOptions(Number(id))}</select></label>` : ''}</div>
+      <div class="page-controls"><label>검색 <input id="program-search" type="search" placeholder="프로그램 또는 장소"></label></div>
       <div id="program-list" class="page-list"></div>`;
-    const update = () => renderProgramList(page, Number(byId('program-group')?.value), byId('program-search').value);
-    byId('program-search').addEventListener('input', update);
-    byId('program-group')?.addEventListener('change', update);
-    update();
-    if (page === 'programs' && id) openProgram(Number(id), location.hash);
+    byId('program-search').addEventListener('input', event => renderProgramList(event.target.value));
+    renderProgramList();
+    if (id) openProgram(Number(id), location.hash);
   } else if (page === 'prepare') {
-    otherContent.innerHTML = `
-      <form id="application-form" class="card page-form">
-        <label>프로그램<select name="programId" required><option value="">프로그램 선택</option>
-          ${programs.map(program => `<option value="${program.programId}" ${program.programId === Number(id) ? 'selected' : ''}>${escapeText(program.title)}</option>`).join('')}
-        </select></label>
-        <label>참여 그룹<select name="groupId" required><option value="">그룹 선택</option>${groupOptions(Number(group))}</select></label>
-        <label>신청 인원<input name="participantCount" type="number" min="1" max="1000" placeholder="그룹 인원"></label>
-        <label>동반 인원<input name="companionCount" type="number" min="0" max="1000" value="0"></label>
-        <button class="pill primary" type="submit">신청 준비 저장</button>
-        <p id="application-error" role="alert"></p>
-      </form>`;
+    renderApplicationPreparation(Number(id), Number(group));
   } else if (page === 'applications') {
     otherContent.innerHTML = `<div class="page-list">${applications.map(item => `
     <article class="card" id="application-${item.applicationId}" tabindex="-1"><h2>${escapeText(item.programTitle)}</h2>
@@ -525,16 +966,18 @@ function renderPage(focus = true) {
         <button class="card area-marker" data-place="${place.venueId}"><strong>${escapeText(place.district)}</strong><span>${escapeText(place.name)}</span></button>`).join('')}</div>`;
   }
   const application = page === 'applications' && id ? byId(`application-${Number(id)}`) : null;
-  if (focus) (application || byId('other-title')).focus();
+  if (focus) (application || byId('prepare-title') || byId('other-title')).focus();
 }
 
 async function openProgram(id, hash = location.hash) {
   const item = await mockActivity.getProgram(id);
   if (!item || location.hash !== hash) return;
   showDetails(item.title, `
-    <p class="page-meta">${escapeText(dateLabel(item.startAt))} · ${escapeText(venueLabel(item.venue))}</p>
+    <p class="page-meta">${escapeText(programSchedule(item))} · ${escapeText(venueLabel(item.venue))}</p>
     ${item.capacity == null ? '' : `<p class="page-meta">정원 ${escapeText(item.capacity)}명</p>`}
-    <p>${escapeText(item.description ?? '등록된 활동 내용이 없어요.')}</p>`);
+    <p>${escapeText(item.description ?? '등록된 활동 내용이 없어요.')}</p>
+    ${hash.startsWith('#prepare') ? '' : `<p class="page-meta"><a class="pill primary" href="#prepare/${item.programId}">신청하기</a></p>`}`);
+  byId('details-content').querySelector('a')?.addEventListener('click', () => detailsDialog.close());
 }
 
 otherContent.addEventListener('submit', async event => {
@@ -554,6 +997,7 @@ otherContent.addEventListener('submit', async event => {
       participantCount: data.get('participantCount') === '' ? null : Number(data.get('participantCount')),
       companionCount: Number(data.get('companionCount')),
       careIds: [],
+      received: form.dataset.received === 'true',
     });
     applications = await mockActivity.getApplications();
     if (form.isConnected) location.hash = 'applications';
@@ -684,8 +1128,8 @@ byId('toggle-theme').addEventListener('click', event => {
 });
 window.addEventListener('hashchange', () => renderPage());
 
-Promise.all([loadSupport(), loadActivity()]).then(() => renderPage(Boolean(location.hash)));
-loadProfile().catch(() => {
+const profileReady = loadProfile().catch(() => {
   byId('profile-organization').textContent = '기관 정보를 불러오지 못했어요';
 });
+Promise.all([loadSupport(), loadActivity(), profileReady]).then(() => renderPage(Boolean(location.hash)));
 loadNotifications().catch(error => { byId('notification-error').textContent = error.message; });
