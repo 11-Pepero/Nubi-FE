@@ -10,7 +10,7 @@ const pages = new Map([
   ['/nubi-logo.png', ['nubi-logo.png', 'image/png']],
 ]);
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   const [filename, type] = pages.get(new URL(request.url, 'http://localhost').pathname) ?? [];
   if (!filename || !['GET', 'HEAD'].includes(request.method)) {
     response.writeHead(404).end();
@@ -23,4 +23,21 @@ createServer(async (request, response) => {
   } catch {
     response.writeHead(500).end();
   }
-}).listen(4173, 'localhost', () => console.log('http://localhost:4173'));
+});
+
+let port = 4173;
+const lastPort = 4183;
+
+server.on('error', error => {
+  if (error.code !== 'EADDRINUSE') throw error;
+  if (port === lastPort) {
+    console.error(`Ports 4173–${lastPort} are already in use. Stop a development server and try again.`);
+    process.exitCode = 1;
+    return;
+  }
+  port += 1;
+  server.listen(port, 'localhost');
+});
+
+server.on('listening', () => console.log(`http://localhost:${port}`));
+server.listen(port, 'localhost');
