@@ -1,5 +1,6 @@
 import { renderApplicationStatus } from './pages/application-status.js';
 import { renderApplicationReview } from './pages/application-review.js';
+import { renderAccessibilityMap } from './pages/accessibility-map.js';
 import { renderProgramDiscovery } from './pages/program-discovery.js';
 
 import { care, groupOptions, groups, loadSupport, openEditor, showPanel } from './pages/support-management.js';
@@ -27,7 +28,7 @@ const pageTitles = {
 let programs = [];
 let applications = [];
 let events = [];
-let places = [];
+let accessibilityMap;
 let notifications = [];
 let unreadCount = 0;
 let notificationPage = 0;
@@ -35,8 +36,8 @@ let notificationTotalPages = 0;
 let notificationBusy = false;
 
 async function loadActivity() {
-  [programs, applications, events, places] = await Promise.all([
-    mockActivity.getPrograms(), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getPlaces(),
+  [programs, applications, events, accessibilityMap] = await Promise.all([
+    mockActivity.getPrograms(), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getAccessibilityMap(),
   ]);
 }
 
@@ -229,9 +230,7 @@ function renderPage(focus = true) {
         <p class="page-meta">${escapeText(dateLabel(event.startAt))} · ${escapeText(venueLabel(event.venue))}</p>
         <p class="page-meta">신청 기관 ${escapeText(event.applicationOrgCount)}곳 · 참여 ${escapeText(event.participantCount)}명</p><button class="pill" data-event="${event.eventId}">행사 수정</button></article>`).join('')}</div>`;
   } else {
-    otherContent.innerHTML = `<p class="page-meta">지역별 예시 장소의 접근 정보를 확인할 수 있어요.</p>
-      <div class="area-map">${places.map((place) => `
-        <button class="card area-marker" data-place="${place.venueId}"><strong>${escapeText(place.district)}</strong><span>${escapeText(place.name)}</span></button>`).join('')}</div>`;
+    renderAccessibilityMap(otherContent, { data: accessibilityMap, escapeText });
   }
   const application = page === 'applications' && id ? byId(`application-${Number(id)}`) : null;
   if (focus) (application || byId('prepare-title') || byId('other-title')).focus();
@@ -254,14 +253,14 @@ async function openProgram(id, hash = location.hash) {
 otherContent.addEventListener('click', async event => {
   const button = event.target.closest('button');
   if (!button) return;
-  const { program, event: eventId, place } = button.dataset;
+  const { program, event: eventId, eventPlace } = button.dataset;
   if (program) await openProgram(Number(program));
   if (eventId !== undefined) {
     const item = events.find(entry => entry.eventId === Number(eventId));
     openEditor(item ? '행사 수정' : '행사 추가', `
       <label>행사 이름<input name="title" required maxlength="80" pattern=".*\\S.*" value="${escapeText(item?.title ?? '')}"></label>
       <label>날짜<input name="date" type="date" required value="${escapeText(item?.startAt?.slice(0, 10) ?? '')}"></label>
-      <label>장소<input name="place" required maxlength="80" pattern=".*\\S.*" value="${escapeText(item?.venue?.name ?? '')}"></label>`, async data => {
+      <label>장소<input name="place" required maxlength="80" pattern=".*\\S.*" value="${escapeText(item?.venue?.name ?? eventPlace ?? '')}"></label>`, async data => {
       await mockActivity.saveEvent(item?.eventId ?? null, {
         title: data.get('title').trim(),
         startAt: `${data.get('date')}${item?.startAt?.slice(10) || 'T09:00:00'}`,
@@ -270,10 +269,6 @@ otherContent.addEventListener('click', async event => {
       events = await mockActivity.getEvents();
       renderPage(false);
     });
-  }
-  if (place !== undefined) {
-    const item = places.find(entry => entry.venueId === Number(place));
-    showDetails(item.name, `<p class="page-meta">${escapeText(item.district)}</p><p>${escapeText(item.detail ?? item.address ?? '')}</p>`);
   }
 });
 

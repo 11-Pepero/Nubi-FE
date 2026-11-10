@@ -96,6 +96,42 @@ const mockSupport = (() => {
 })();
 
 const mockActivity = (() => {
+  const accessibilityMap = {
+    month: 11,
+    defaultDistrictId: 'cheoin',
+    districts: [
+      {
+        id: 'suji', name: '수지구', facilityCount: 12, facilitiesPerThousand: 0.8, programCount: 22,
+        boundary: '35,125 70,54 206,27 260,126 215,215 102,207', labelPoint: [150, 116],
+        facilityPoints: [[97,158],[114,146],[164,151],[222,153],[76,135]],
+        programPoints: [[60,109],[60,145],[82,139],[101,198],[110,207],[120,190],[119,166],[123,157],[165,211],[198,159],[211,103],[225,120],[241,106],[245,134],[183,100]],
+        summary: '세 구 중 시설 한 곳당 프로그램이 가장 많아요.',
+        neighborhoods: [{ name: '고기동', facilityCount: 2, programCount: 1 }, { name: '동천동', facilityCount: 3, programCount: 2 }],
+      },
+      {
+        id: 'giheung', name: '기흥구', facilityCount: 19, facilitiesPerThousand: 1.2, programCount: 26,
+        boundary: '102,207 215,215 260,126 405,104 486,199 450,345 315,381 188,335', labelPoint: [348, 241],
+        facilityPoints: [[181,246],[225,226],[232,222],[235,303],[272,225],[280,211],[291,150],[290,260],[338,145],[336,318],[381,344],[402,258],[407,161],[423,276],[444,263],[450,179]],
+        programPoints: [[207,261],[234,325],[289,190],[289,245],[293,273],[297,324],[305,136],[313,165],[313,318],[345,146],[351,198],[355,219],[397,318],[407,181],[412,188],[416,173],[410,244],[418,321],[436,234],[442,319],[444,171],[474,209]],
+        summary: '프로그램은 가장 많고, 동네별 참여 기회에는 차이가 있어요.',
+        neighborhoods: [{ name: '지곡동', facilityCount: 3, programCount: 1 }, { name: '고매동', facilityCount: 2, programCount: 1 }],
+      },
+      {
+        id: 'cheoin', name: '처인구', facilityCount: 23, facilitiesPerThousand: 1.6, programCount: 12,
+        boundary: '315,381 450,345 486,199 405,104 585,64 789,150 845,312 774,463 639,590 444,581 315,500',
+        labelPoint: [610, 333],
+        facilityPoints: [[476,141],[498,98],[465,353],[510,243],[527,235],[514,271],[605,205],[652,165],[530,398],[492,410],[361,415],[358,434],[610,447],[572,437],[653,426],[691,459],[710,464],[743,416],[650,566],[512,561],[444,579],[380,532],[388,532]],
+        programPoints: [[501,128],[527,152],[532,178],[539,217],[727,177],[678,333],[703,371],[410,491],[441,501],[583,482],[511,567],[773,330]],
+        summary: '시설은 가장 많은데 갈 수 있는 프로그램은 가장 적어요.',
+        neighborhoods: [
+          { name: '백암면', facilityCount: 4, programCount: 0 },
+          { name: '원삼면', facilityCount: 3, programCount: 0 },
+          { name: '양지면', facilityCount: 2, programCount: 1 },
+          { name: '포곡읍', facilityCount: 3, programCount: 1 },
+        ],
+      },
+    ],
+  };
   const places = [
     { venueId: 1, name: '동백호수공원', district: '기흥구', detail: '산책로 일부 구간에 경사로가 있어요.' },
     { venueId: 2, name: '용인문화예술원', district: '처인구', detail: '건물 입구와 관람층에 승강기가 있어요.' },
@@ -220,7 +256,7 @@ const mockActivity = (() => {
         return { program, result: needsReview ? 'NEEDS_REVIEW' : 'ELIGIBLE', review: needsReview ? review : null };
       }) });
     },
-    async getPlaces() { return structuredClone(places); },
+    async getAccessibilityMap() { return structuredClone(accessibilityMap); },
     async getEvents() { return structuredClone(events); },
     async getApplications() { return structuredClone(applications); },
     async prepareApplication({ programId, groupId, participantCount, companionCount, submitImmediately = false, received = false }) {
