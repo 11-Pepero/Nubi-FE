@@ -1,3 +1,4 @@
+import { renderApplicationStatus } from './pages/application-status.js';
 import { renderProgramDiscovery } from './pages/program-discovery.js';
 
 import { care, groupOptions, groups, loadSupport, openEditor, showPanel } from './pages/support-management.js';
@@ -87,11 +88,6 @@ const notificationTypes = {
   DEADLINE: ['application', 'deadline'],
   NEW_PROGRAM: ['program', 'program'],
   NEW_REVIEW: ['program', 'program'],
-};
-const applicationStatuses = {
-  PREPARING: '신청 준비', SUBMITTED: '접수 기다림', RECEIVED: '접수 완료', INQUIRY: '문의 있음',
-  WAITING: '대기 중', CONFIRMED: '참여 예정', ATTENDED: '다녀왔어요',
-  REJECTED: '거절', CANCELLED: '취소',
 };
 const dateLabel = value => value?.slice(0, 10) ?? '일정 미정';
 const venueLabel = venue => venue?.name ?? '장소 미정';
@@ -187,13 +183,16 @@ function renderPage(focus = true) {
       refreshApplications: async () => { applications = await mockActivity.getApplications(); },
     });
   } else if (page === 'applications') {
-    otherContent.innerHTML = `<div class="page-list">${applications.map(item => `
-    <article class="card" id="application-${item.applicationId}" tabindex="-1"><h2>${escapeText(item.programTitle)}</h2>
-        <p class="page-meta">${escapeText(item.groupName ?? '미지정')} · ${escapeText(applicationStatuses[item.status] ?? item.status)}</p>
-        <p class="page-meta">이용자 ${escapeText(item.participantCount)}명 · 동반 ${escapeText(item.companionCount)}명</p>
-        ${item.status === 'PREPARING' ? `<button class="pill" data-cancel-application="${item.applicationId}">준비 취소</button>` : ''}
-      </article>`).join('') || '<p class="empty">준비 중인 신청이 없어요.</p>'}</div>
-      <p class="page-meta"><a class="pill" href="#prepare">프로그램 신청 준비</a></p>`;
+    const update = operation => async (...args) => {
+      await operation(...args);
+      applications = await mockActivity.getApplications();
+      if (location.hash.slice(1).split('/')[0] === 'applications') renderPage(false);
+    };
+    renderApplicationStatus(otherContent, {
+      applications, programs, escapeText,
+      markReceived: update(mockActivity.markApplicationReceived),
+      saveReview: update(mockActivity.saveApplicationReview),
+    });
   } else if (page === 'events') {
     otherContent.innerHTML = `
       <p class="page-meta"><button class="pill primary" data-event="0">행사 추가</button></p>
@@ -226,18 +225,8 @@ async function openProgram(id, hash = location.hash) {
 otherContent.addEventListener('click', async event => {
   const button = event.target.closest('button');
   if (!button) return;
-  const { program, cancelApplication, event: eventId, place } = button.dataset;
+  const { program, event: eventId, place } = button.dataset;
   if (program) await openProgram(Number(program));
-  if (cancelApplication) {
-    button.disabled = true;
-    try {
-      await mockActivity.cancelApplication(Number(cancelApplication));
-      applications = await mockActivity.getApplications();
-      if (button.isConnected) renderPage();
-    } finally {
-      button.disabled = false;
-    }
-  }
   if (eventId !== undefined) {
     const item = events.find(entry => entry.eventId === Number(eventId));
     openEditor(item ? '행사 수정' : '행사 추가', `

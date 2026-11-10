@@ -7,20 +7,16 @@ const pages = new Map([
   ['/styles.css', ['styles.css', 'text/css']],
   ['/app.js', ['app.js', 'text/javascript']],
   ['/mock-data.js', ['mock-data.js', 'text/javascript']],
-  ['/pages/program-discovery.js', ['pages/program-discovery.js', 'text/javascript']],
-  ['/pages/program-discovery.css', ['pages/program-discovery.css', 'text/css']],
-  ['/pages/support-management.js', ['pages/support-management.js', 'text/javascript']],
-  ['/pages/support-management.css', ['pages/support-management.css', 'text/css']],
-  ['/pages/eligible-programs.js', ['pages/eligible-programs.js', 'text/javascript']],
-  ['/pages/eligible-programs.css', ['pages/eligible-programs.css', 'text/css']],
-  ['/pages/application-preparation.js', ['pages/application-preparation.js', 'text/javascript']],
-  ['/pages/application-preparation.css', ['pages/application-preparation.css', 'text/css']],
   ['/program-format.js', ['program-format.js', 'text/javascript']],
   ['/nubi-logo.png', ['nubi-logo.png', 'image/png']],
 ]);
 
 const server = createServer(async (request, response) => {
-  const [filename, type] = pages.get(new URL(request.url, 'http://localhost').pathname) ?? [];
+  const pathname = new URL(request.url, 'http://localhost').pathname;
+  const pageAsset = /^\/pages\/[a-z0-9-]+\.(js|css)$/.exec(pathname);
+  const [filename, type] = pages.get(pathname) ?? (pageAsset
+    ? [pathname.slice(1), pageAsset[1] === 'js' ? 'text/javascript' : 'text/css']
+    : []);
   if (!filename || !['GET', 'HEAD'].includes(request.method)) {
     response.writeHead(404).end();
     return;
@@ -29,8 +25,8 @@ const server = createServer(async (request, response) => {
     const contents = await readFile(new URL(filename, import.meta.url));
     response.writeHead(200, { 'Content-Type': type.startsWith('image/') ? type : `${type}; charset=utf-8`, 'Cache-Control': 'no-store' });
     response.end(request.method === 'HEAD' ? undefined : contents);
-  } catch {
-    response.writeHead(500).end();
+  } catch (error) {
+    response.writeHead(error.code === 'ENOENT' ? 404 : 500).end();
   }
 });
 
