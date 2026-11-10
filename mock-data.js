@@ -151,8 +151,25 @@ const mockActivity = (() => {
     applicationContact: { team: '문화재단 평생학습팀', phone: '031-000-0000', hours: '평일 9시~18시' },
     applicationNotes: '큰 소리에 놀라는 분이 있어 출입문 가까운 조용한 자리를 부탁드려요.',
   });
-  programs.push(...matchedPrograms.map(({ review, ...program }) => program));
-  const applications = [6, 7, 8, 9].map((programId, index) => {
+  const discoveryMetadata = [
+    ['평생교육', '처인구'], ['장애인의 날', '기흥구'], ['문화와 예술', '수지구'],
+    ['보건', '기흥구'], ['체육', '기흥구'], ['평생교육', '수지구'],
+  ];
+  programs.push(...matchedPrograms.map(({ review, ...program }, index) => ({
+    ...program, category: discoveryMetadata[index][0], district: discoveryMetadata[index][1],
+    discoveryStatus: review ? 'NEEDS_REVIEW' : 'ELIGIBLE',
+    discoveryAction: program.canApplyDirectly ? 'APPLY' : 'PREPARE',
+  })));
+  const discoveryExamples = [
+    { programId: 10, title: '주말 목공 체험', organizerName: '용인시청소년수련관', district: '처인구', category: '평생교육', venue: { name: '용인시청소년수련관' }, startAt: `${month}-16T14:00:00`, days: 10, discoveryStatus: 'UNKNOWN', discoveryAction: 'INQUIRE', description: '목공 도구를 사용해 작은 생활 소품을 만드는 체험이에요.' },
+    { programId: 11, title: '큐레이터와 함께 보는 전시', organizerName: '용인시립미술관', district: '기흥구', category: '문화와 예술', venue: { name: '용인시립미술관' }, accessibilityTags: ['승강기', '휠체어 대여'], discoveryStatus: 'ELIGIBLE', discoveryAction: 'PREPARE', applyMethod: 'PHONE', description: '큐레이터의 설명과 함께 전시 작품을 감상해요.' },
+    { programId: 12, title: '어울림 보치아 교실', organizerName: '용인시체육회', district: '처인구', category: '체육', venue: { name: '용인실내체육관' }, startAt: `${month}-20T10:00:00`, days: 14, accessibilityTags: ['장애인 화장실'], discoveryStatus: 'ELIGIBLE', discoveryAction: 'PREPARE', applyMethod: 'PAPER', description: '보치아 경기 규칙을 배우고 함께 연습해요.' },
+    { programId: 13, title: '장애인 등록증 제시 시 20% 할인', organizerName: '용인 문화의 거리 상인회', district: '처인구', category: '할인과 혜택', days: 24, discoveryStatus: 'BENEFIT', discoveryAction: 'DETAILS', description: '참여 매장에서 장애인 등록증을 제시하면 할인 혜택을 받을 수 있어요.' },
+  ];
+  programs.push(...discoveryExamples.map(({ days, ...program }) => ({
+    ...program, status: 'PUBLISHED', applyUntil: days == null ? null : new Date(deadlineStart + days * 86400000).toISOString(),
+  })));
+  const applications = [6, 7, 8, 9, 11, 12].map((programId, index) => {
     const program = programs.find(item => item.programId === programId);
     return {
       applicationId: index + 1, programId, groupId: 1, programTitle: program.title,
