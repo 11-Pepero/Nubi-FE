@@ -7,6 +7,15 @@ const pages = new Map([
   ['/styles.css', ['styles.css', 'text/css']],
   ['/app.js', ['app.js', 'text/javascript']],
   ['/mock-data.js', ['mock-data.js', 'text/javascript']],
+  ['/pages/program-discovery.js', ['pages/program-discovery.js', 'text/javascript']],
+  ['/pages/program-discovery.css', ['pages/program-discovery.css', 'text/css']],
+  ['/pages/support-management.js', ['pages/support-management.js', 'text/javascript']],
+  ['/pages/support-management.css', ['pages/support-management.css', 'text/css']],
+  ['/pages/eligible-programs.js', ['pages/eligible-programs.js', 'text/javascript']],
+  ['/pages/eligible-programs.css', ['pages/eligible-programs.css', 'text/css']],
+  ['/pages/application-preparation.js', ['pages/application-preparation.js', 'text/javascript']],
+  ['/pages/application-preparation.css', ['pages/application-preparation.css', 'text/css']],
+  ['/program-format.js', ['program-format.js', 'text/javascript']],
   ['/nubi-logo.png', ['nubi-logo.png', 'image/png']],
 ]);
 
