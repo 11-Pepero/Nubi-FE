@@ -63,7 +63,7 @@
 .access-map-neighborhoods li > span:first-of-type { color: var(--muted); }
 .access-no-programs { color: #b33127; }
 .dark .access-no-programs { color: #ff9b92; }
-.access-map-create { width: 100%; padding: 9px 12px; }
+.access-map-create { width: 100%; padding: 9px 12px; text-align: center; }
 @media (max-width: 1050px) {
   .access-map { grid-template-rows: auto auto auto auto; min-height: 0; }
   .access-map-panel { position: static; width: 100%; margin: 12px 0; }

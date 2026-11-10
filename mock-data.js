@@ -226,7 +226,72 @@ const mockActivity = (() => {
       participantCount, companionCount, status,
     };
   });
-  const events = [{ eventId: 1, title: '11월 기관 나들이', startAt: '2026-11-27T10:00:00', venue: places[0], applicationOrgCount: 0, participantCount: 0, newApplicationCount: 0 }];
+  const eventEditorOptions = {
+    features: [
+      ...['승강기', '장애인 화장실', '주출입구 접근로', '높이 차이 없음', '장애인 주차', '점자블록'].map(label => ({ label, type: 'facility' })),
+      ...['동반인 무료', '쉬운 말 안내', '조용한 휴식 공간', '휠체어석'].map(label => ({ label, type: 'support' })),
+    ],
+  };
+  const eventDate = (days, time = '13:00') => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${time}:00`;
+  };
+  const events = [
+    { eventId: 1, status: 'PUBLISHED', title: '개관 30주년 함께 걷는 가을 축제', startAt: eventDate(11), capacity: 40,
+      venue: { name: '센터 강당과 앞마당' }, applicationOrgCount: 5, participantCount: 34, newApplicationCount: 2,
+      preparationTasks: [
+        { id: 'wheelchair', label: '휠체어 자리 7석', note: '앞줄 통로 쪽, 강당 출입문 기준', groups: ['수지 2', '기흥 2', '그룹홈 3'], ready: true },
+        { id: 'restroom', label: '장애인 화장실 안내 표지', note: '강당 옆 1층 화장실까지 3곳', groups: ['전체'], ready: true },
+        { id: 'easy', label: '쉬운 말 안내 자료', note: '순서표를 그림과 함께 출력', groups: ['수지', '처인 주간보호'], ready: true },
+        { id: 'lift', label: '리프트 차량 정차 공간 3대', note: '정문 앞 12:30부터 비워 두기', groups: ['수지', '그룹홈', '작업장'], ready: false },
+        { id: 'quiet', label: '조용한 휴식 공간', note: '2층 상담실 열어 두기', groups: ['그룹홈', '수지 하늘'], ready: true },
+        { id: 'lunch', label: '점심 식사 보조', note: '다진 음식 1인분, 보조 인력 1명', groups: ['처인 주간보호'], ready: false },
+      ],
+      applicants: [
+        { organization: '수지 ○○ 주간보호센터', groupName: '주간활동반', managerName: '김○○', managerRole: '사회복지사',
+          phone: '031-000-0000', contactHours: '평일 9시~18시', submissionMethod: '지원 카드로 신청했어요', transport: '리프트 차량 1대', arrivalTime: '12:40',
+          participantCount: 6, companionCount: 2, wheelchairCount: 2, supportNeeds: ['휠체어 2', '쉬운 말 안내'],
+          supportChecklist: [{ label: '휠체어 2명 자리', note: '앞줄 통로 쪽 2석', ready: true }, { label: '쉬운 말 안내', note: '진행자에게 전달함', ready: true }, { label: '리프트 차량 승하차', note: '정문 앞 정차 공간 확인 필요', ready: false }],
+          individualCareCount: 1, individualCare: [{ name: '하늘', title: '큰 소리 피하기', note: '출입문 가까운 자리에 앉고, 필요할 때 휴식 공간으로 이동할 수 있게 해 주세요.' }],
+          note: '점심 식사가 포함인지, 도시락을 따로 챙겨야 하는지 궁금해요.', status: 'NEW', appliedAt: new Date().toISOString() },
+        { organization: '기흥 ○○ 장애인복지관', groupName: '성인 여가반', managerName: '박○○', participantCount: 4, companionCount: 2, wheelchairCount: 2, supportNeeds: ['휠체어 2', '장애인 화장실'], transport: '대중교통', arrivalTime: '12:50', status: 'NEW', appliedAt: new Date(Date.now() - 600000).toISOString() },
+        { organization: '용인 ○○ 그룹홈', groupName: '생활반', managerName: '이○○', participantCount: 4, companionCount: 2, wheelchairCount: 3, supportNeeds: ['휠체어 3', '조용한 자리'], individualCareCount: 2,
+          individualCare: [{ name: '별', title: '전동휠체어 충전 콘센트' }, { name: '구름', title: '휴식 30분마다' }], transport: '리프트 차량', arrivalTime: '12:45', status: 'INQUIRY', appliedAt: eventDate(-9) },
+        { organization: '처인 ○○ 보호작업장', groupName: '작업반', managerName: '최○○', participantCount: 6, companionCount: 2, supportNeeds: ['동반 1명당 3명'], transport: '승합차', arrivalTime: '12:30', status: 'CONFIRMED', appliedAt: eventDate(-11) },
+        { organization: '처인 ○○ 주간보호센터', groupName: '주간활동반', managerName: '정○○', participantCount: 4, companionCount: 2, supportNeeds: ['쉬운 말 안내', '점심 식사 보조'], individualCareCount: 1,
+          individualCare: [{ name: '솔', title: '다진 음식, 식사 보조' }], status: 'CONFIRMED', appliedAt: eventDate(-13) },
+      ] },
+    { eventId: 2, status: 'DRAFT', title: '우리 동네 겨울 축제', startAt: eventDate(25), endAt: eventDate(25, '16:00'), capacity: 40,
+      venue: { name: '용인 ○○ 주간보호센터 1층 강당과 앞마당', district: '처인구' }, accessibilityTags: ['승강기', '장애인 화장실', '주출입구 접근로', '높이 차이 없음', '장애인 주차', '동반인 무료', '쉬운 말 안내'],
+      notes: '쉬고 싶으면 조용한 방에서 쉴 수 있어요.', applicationOrgCount: 0, participantCount: 0, newApplicationCount: 0 },
+    { eventId: 3, status: 'PUBLISHED', title: '어울림 합창 연습', startAt: eventDate(4, '15:00'), capacity: 10, venue: { name: '센터 1층 강당' }, applicationOrgCount: 3, participantCount: 6, newApplicationCount: 1,
+      applicants: ['주간보호센터 A', '지역 활동센터', '직업재활시설'].map(organization => ({ organization, participantCount: 2 })) },
+    { eventId: 4, status: 'PUBLISHED', title: '겨울맞이 손뜨개 모임', startAt: eventDate(23, '10:00'), capacity: 15, venue: { name: '센터 2층 프로그램실' }, applicationOrgCount: 2, participantCount: 9, newApplicationCount: 2,
+      applicants: [{ organization: '주간보호센터 A', participantCount: 5 }, { organization: '주간보호센터 B', participantCount: 4 }] },
+    ...[
+      ['여름 텃밭 가꾸기', -30, 4, 28, 7], ['함께 걷는 공원 산책', -45, 3, 18, 2], ['동네 음악회', -55, 2, 16, 1],
+      ['가을 공예 교실', -65, 2, 12, 1], ['그림책 읽는 날', -80, 1, 8, 1],
+    ].map(([title, days, applicationOrgCount, participantCount, reviewCount], index) => ({
+      eventId: index + 5, status: 'COMPLETED', title, startAt: eventDate(days), venue: { name: '센터 프로그램실' },
+      applicationOrgCount, participantCount, reviewCount, rating: index === 0 ? 4.8 : null,
+      reviewImprovements: index === 0 ? '그늘막을 늘리고, 순서표에 그림을 넣어 쉬운 말 안내를 준비해 주세요.' : '',
+      reviews: Array.from({ length: reviewCount }, (_, reviewIndex) => {
+        const organizations = ['수지 ○○ 주간보호센터', '용인 ○○ 그룹홈', '처인 ○○ 보호작업장', '기흥 ○○ 장애인복지관'];
+        const comments = ['휠체어 높이에 맞춘 텃밭에서 직접 흙을 만질 수 있었어요.', '햇볕이 강해서 그늘막이 조금 더 있으면 좋겠어요.', '수확한 채소를 가져갈 수 있어서 좋아했어요.', '함께 활동하기 편했고 진행자 안내가 친절했어요.'];
+        return {
+          organization: organizations[reviewIndex % organizations.length],
+          comment: comments[reviewIndex % comments.length],
+          createdAt: eventDate(days + 1 + (reviewIndex === 0 ? 1 : 0)),
+          rating: reviewIndex === 1 ? 4 : 5,
+          participantCount: 5 - reviewIndex % 3, companionCount: 2,
+          checks: [{ label: '높이 맞춤 텃밭', met: true }, { label: '장애인 화장실', met: reviewIndex !== 4 }, { label: '동반인 무료', met: true }, { label: '쉬운 말 안내', met: reviewIndex < 4 }],
+          reactions: reviewIndex < 5 ? ['즐거워했어요', '다시 가고 싶어해요'] : ['즐거워했어요'],
+          reply: reviewIndex > 0 && reviewIndex < 6 ? '다음 행사에도 의견을 반영할게요.' : null,
+        };
+      }),
+    })),
+  ];
   const notifications = [
     [1, 'NEW_APPLICATION', '새 신청', '기흥 ○○ 복지관이 가을 축제에 바로 신청했어요\n이용자 6명, 동반 2명 · 휠체어 2명', 'APPLICATION', null, false, 0],
     [2, 'APPLICATION_DECIDED', '접수 확인', '용인시 문화재단이 그림책 낭독회 접수를 확인했어요\n휠체어 3명 자리 확보, 조용한 자리 가능', null, null, false, 5],
@@ -258,6 +323,7 @@ const mockActivity = (() => {
     },
     async getAccessibilityMap() { return structuredClone(accessibilityMap); },
     async getEvents() { return structuredClone(events); },
+    async getEventEditorOptions() { return structuredClone(eventEditorOptions); },
     async getApplications() { return structuredClone(applications); },
     async prepareApplication({ programId, groupId, participantCount, companionCount, submitImmediately = false, received = false }) {
       const program = programs.find(item => item.programId === programId);
@@ -304,6 +370,28 @@ const mockActivity = (() => {
       const item = events.find(entry => entry.eventId === id);
       if (item) Object.assign(item, values);
       else events.push({ eventId: events.length + 1, applicationOrgCount: 0, participantCount: 0, newApplicationCount: 0, ...values });
+    },
+    async saveEventApplicant(eventId, index, changes) {
+      const event = events.find(item => item.eventId === eventId);
+      const applicant = event?.applicants?.[index];
+      if (!applicant) throw new Error('신청 기관을 찾을 수 없어요.');
+      Object.assign(applicant, structuredClone(changes));
+      if (changes.status) event.newApplicationCount = event.applicants.filter(item => item.status === 'NEW').length;
+      return structuredClone(applicant);
+    },
+    async saveEventPreparationTask(eventId, taskId, ready) {
+      const tasks = events.find(event => event.eventId === eventId)?.preparationTasks;
+      const task = tasks?.find(item => item.id === taskId);
+      if (!task) throw new Error('준비 항목을 찾을 수 없어요.');
+      task.ready = ready;
+      return structuredClone(tasks);
+    },
+    async saveEventReviewReply(eventId, index, reply) {
+      const reviews = events.find(event => event.eventId === eventId)?.reviews;
+      const review = reviews?.[index];
+      if (!review) throw new Error('후기를 찾을 수 없어요.');
+      review.reply = reply;
+      return structuredClone(reviews);
     },
     async getNotifications({ page = 0, size = 5 } = {}) {
       return {

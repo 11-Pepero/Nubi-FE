@@ -1,9 +1,11 @@
+import { renderEventEditor, renderEventList } from './pages/event-management.js';
+import { renderEventApplicants } from './pages/event-applicants.js';
 import { renderApplicationStatus } from './pages/application-status.js';
 import { renderApplicationReview } from './pages/application-review.js';
 import { renderAccessibilityMap } from './pages/accessibility-map.js';
 import { renderProgramDiscovery } from './pages/program-discovery.js';
 
-import { care, groupOptions, groups, loadSupport, openEditor, showPanel } from './pages/support-management.js';
+import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
 import { renderApplicationPreparation } from './pages/application-preparation.js';
 import { programDeadline, programSchedule } from './program-format.js';
@@ -28,6 +30,7 @@ const pageTitles = {
 let programs = [];
 let applications = [];
 let events = [];
+let eventEditorOptions;
 let accessibilityMap;
 let notifications = [];
 let unreadCount = 0;
@@ -36,8 +39,8 @@ let notificationTotalPages = 0;
 let notificationBusy = false;
 
 async function loadActivity() {
-  [programs, applications, events, accessibilityMap] = await Promise.all([
-    mockActivity.getPrograms(), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getAccessibilityMap(),
+  [programs, applications, events, accessibilityMap, eventEditorOptions] = await Promise.all([
+    mockActivity.getPrograms(), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getAccessibilityMap(), mockActivity.getEventEditorOptions(),
   ]);
 }
 
@@ -224,11 +227,57 @@ function renderPage(focus = true) {
       markReceived: update(mockActivity.markApplicationReceived),
     });
   } else if (page === 'events') {
-    otherContent.innerHTML = `
-      <p class="page-meta"><button class="pill primary" data-event="0">행사 추가</button></p>
-      <div class="page-list">${events.map(event => `<article class="card"><h2>${escapeText(event.title)}</h2>
-        <p class="page-meta">${escapeText(dateLabel(event.startAt))} · ${escapeText(venueLabel(event.venue))}</p>
-        <p class="page-meta">신청 기관 ${escapeText(event.applicationOrgCount)}곳 · 참여 ${escapeText(event.participantCount)}명</p><button class="pill" data-event="${event.eventId}">행사 수정</button></article>`).join('')}</div>`;
+    const event = events.find(item => String(item.eventId) === id);
+    if (event && ['applications', 'reviews'].includes(group) && event.status !== 'DRAFT') {
+      byId('other-title').hidden = true;
+      byId('other-page').setAttribute('aria-labelledby', 'event-applicant-title');
+      renderEventApplicants(otherContent, {
+        event, escapeText, initialSection: group,
+        saveReviewReply: async (index, reply) => {
+          const reviews = await mockActivity.saveEventReviewReply(event.eventId, index, reply);
+          events = await mockActivity.getEvents();
+          return reviews;
+        },
+        savePreparationTask: async (taskId, ready) => {
+          const tasks = await mockActivity.saveEventPreparationTask(event.eventId, taskId, ready);
+          events = await mockActivity.getEvents();
+          return tasks;
+        },
+        saveApplicant: async (index, changes) => {
+          const applicant = await mockActivity.saveEventApplicant(event.eventId, index, changes);
+          events = await mockActivity.getEvents();
+          return applicant;
+        },
+        closeApplications: async () => {
+          await mockActivity.saveEvent(event.eventId, { applicationsClosed: true });
+          events = await mockActivity.getEvents();
+        },
+      });
+      if (focus) byId('event-applicant-title').focus();
+      return;
+    }
+    if (id !== 'new' && !event) {
+      byId('other-title').hidden = true;
+      byId('other-page').setAttribute('aria-labelledby', 'event-list-title');
+      renderEventList(otherContent, { events, escapeText, initialTab: group });
+      if (focus) byId('event-list-title').focus();
+      return;
+    } else {
+      const eventHash = location.hash;
+      const initialPlace = accessibilityMap?.districts.find(district => district.id === group)?.name;
+      byId('other-title').hidden = true;
+      byId('other-page').setAttribute('aria-labelledby', 'event-title');
+      renderEventEditor(otherContent, {
+        event, options: eventEditorOptions, initialPlace, escapeText,
+        save: async values => {
+          await mockActivity.saveEvent(event?.eventId ?? null, values);
+          events = await mockActivity.getEvents();
+          if (location.hash === eventHash) location.hash = values.status === 'DRAFT' ? 'events/list/drafts' : 'events';
+        },
+      });
+      if (focus) byId('event-title').focus();
+      return;
+    }
   } else {
     renderAccessibilityMap(otherContent, { data: accessibilityMap, escapeText });
   }
@@ -253,23 +302,8 @@ async function openProgram(id, hash = location.hash) {
 otherContent.addEventListener('click', async event => {
   const button = event.target.closest('button');
   if (!button) return;
-  const { program, event: eventId, eventPlace } = button.dataset;
+  const { program } = button.dataset;
   if (program) await openProgram(Number(program));
-  if (eventId !== undefined) {
-    const item = events.find(entry => entry.eventId === Number(eventId));
-    openEditor(item ? '행사 수정' : '행사 추가', `
-      <label>행사 이름<input name="title" required maxlength="80" pattern=".*\\S.*" value="${escapeText(item?.title ?? '')}"></label>
-      <label>날짜<input name="date" type="date" required value="${escapeText(item?.startAt?.slice(0, 10) ?? '')}"></label>
-      <label>장소<input name="place" required maxlength="80" pattern=".*\\S.*" value="${escapeText(item?.venue?.name ?? eventPlace ?? '')}"></label>`, async data => {
-      await mockActivity.saveEvent(item?.eventId ?? null, {
-        title: data.get('title').trim(),
-        startAt: `${data.get('date')}${item?.startAt?.slice(10) || 'T09:00:00'}`,
-        venue: { name: data.get('place').trim() },
-      });
-      events = await mockActivity.getEvents();
-      renderPage(false);
-    });
-  }
 });
 
 notificationPanel.addEventListener('click', async event => {
