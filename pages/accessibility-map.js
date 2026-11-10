@@ -87,7 +87,7 @@ export function renderAccessibilityMap(container, { data, escapeText }) {
       <p class="access-map-insight">${escapeText(district.summary)} ${district.facilityCount ? `시설 한 곳당 ${ratio}개예요.` : ''}</p>
       <h3>참여 기회가 적은 동네</h3>
       <ul class="access-map-neighborhoods">${district.neighborhoods.map(item => `<li><strong>${escapeText(item.name)}</strong><span>시설 ${number.format(item.facilityCount)}</span><span class="${item.programCount === 0 ? 'access-no-programs' : ''}">프로그램 ${number.format(item.programCount)}</span></li>`).join('') || '<li>등록된 동네 정보가 없어요.</li>'}</ul>
-      <button type="button" class="pill primary access-map-create" data-event="0" data-event-place="${escapeText(district.name)}">이 지역에 행사 올리기</button>`;
+      <a class="pill primary access-map-create" href="#events/new/${encodeURIComponent(district.id)}">이 지역에 행사 올리기</a>`;
   }
 
   function updateZoom() {

@@ -29,15 +29,15 @@ svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; s
   flex-direction: column;
   overflow: auto;
 }
-.brand { display: flex; align-items: center; gap: 6px; padding: 0 3px; }
-.brand-identity { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.brand { display: grid; grid-template-columns: 28px minmax(0, 1fr) 28px; align-items: start; gap: 7px; padding: 0 3px; }
+.brand > .icon-button { width: 28px; height: 30px; }
+.brand-identity { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 4px 7px; min-width: 0; }
 .brand-mark { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 8px; overflow: hidden; background: white; }
 .brand-mark img { max-width: none; margin: -2px; }
-.brand-copy { display: grid; gap: 2px; }
-.brand-copy strong { font-size: 18px; line-height: 20px; }
-.brand-copy small { color: var(--muted); font-size: 11px; line-height: 15px; word-break: keep-all; }
-.notice { position: relative; margin-left: auto; color: var(--muted); display: flex; }
-.notice b { position: absolute; top: -5px; right: -5px; background: #cb4646; color: white; border-radius: 50%; font-size: 9px; width: 14px; height: 14px; text-align: center; }
+.brand-identity strong { font-size: 18px; line-height: 20px; }
+.brand-identity small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; line-height: 14px; word-break: keep-all; }
+.notice { position: relative; color: var(--muted); }
+.notice b { position: absolute; top: -2px; right: -2px; display: grid; place-items: center; background: #cb4646; color: white; border-radius: 50%; font-size: 9px; width: 14px; height: 14px; }
 .prepare { margin: 19px 0 9px; padding: 8px 10px; background: white; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; font-weight: 700; }
 .prepare strong { margin-right: 4px; }
 .prepare { display: block; }
