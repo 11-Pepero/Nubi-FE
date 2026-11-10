@@ -9,7 +9,7 @@ const stages = [
 const steps = ['준비', '접수', '참여', '후기'];
 const methods = { PHONE: '전화 접수', ONLINE: '온라인 접수', PAPER: '서면 접수' };
 
-export function renderApplicationStatus(container, { applications, programs, escapeText, markReceived, saveReview }) {
+export function renderApplicationStatus(container, { applications, programs, escapeText, markReceived }) {
   const rows = applications.map(item => ({
     item,
     program: programs.find(program => program.programId === item.programId),
@@ -29,20 +29,10 @@ export function renderApplicationStatus(container, { applications, programs, esc
       <div class="application-rows"></div>
       <p class="application-note">외부 기관 접수는 대신 넣지 않아요. 담당자가 직접 접수한 뒤 접수 완료를 눌러 주세요.</p>
       <p class="application-error" role="alert"></p>
-      <dialog class="application-review" aria-label="참여 후기">
-        <form><h2>참여 후기</h2><label>후기<textarea name="review" required maxlength="500" rows="4"></textarea></label>
-          <p role="alert"></p>
-          <div class="actions"><button type="button" class="pill" data-close-review>닫기</button><button class="pill primary" type="submit">저장하기</button></div>
-        </form>
-      </dialog>
     </section>`;
   const page = container.firstElementChild;
   const list = page.querySelector('.application-rows');
   const filters = page.querySelector('.application-filters');
-  const dialog = page.querySelector('dialog');
-  const form = dialog.querySelector('form');
-  let reviewId;
-
   function update(key) {
     for (const button of filters.children) button.setAttribute('aria-pressed', String(button.dataset.stage === key));
     list.innerHTML = rows.filter(row => key === 'all' || stages[row.stage]?.key === key)
@@ -53,17 +43,10 @@ export function renderApplicationStatus(container, { applications, programs, esc
     if (button) update(button.dataset.stage);
   });
   list.addEventListener('click', async event => {
-    const button = event.target.closest('button[data-action]');
+    const button = event.target.closest('button[data-action=receive]');
     if (!button || button.disabled) return;
     const item = rows.find(({ item }) => String(item.applicationId) === button.closest('[data-application-id]').dataset.applicationId)?.item;
     if (!item) return;
-    if (button.dataset.action === 'review') {
-      reviewId = item.applicationId;
-      form.elements.review.value = item.review ?? '';
-      form.querySelector('[role="alert"]').textContent = '';
-      dialog.showModal();
-      return;
-    }
     const error = page.querySelector('.application-error');
     button.disabled = true;
     error.textContent = '';
@@ -73,22 +56,6 @@ export function renderApplicationStatus(container, { applications, programs, esc
       error.textContent = failure.message;
     } finally {
       button.disabled = false;
-    }
-  });
-  form.querySelector('[data-close-review]').addEventListener('click', () => dialog.close());
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    const review = form.elements.review.value.trim();
-    const submit = form.querySelector('[type="submit"]');
-    if (!review || submit.disabled) return;
-    submit.disabled = true;
-    try {
-      await saveReview(reviewId, review);
-      dialog.close();
-    } catch (failure) {
-      form.querySelector('[role="alert"]').textContent = failure.message;
-    } finally {
-      submit.disabled = false;
     }
   });
   update('all');
@@ -114,7 +81,7 @@ function applicationRow({ item, program, stage }, escapeText) {
   } else if (stage === 1 || stage === 2) {
     action = `<button class="pill" type="button" data-program="${escapeText(item.programId)}">참가 안내 보기</button>`;
   } else if (stage === 3) {
-    action = `<button class="pill" type="button" data-action="review">${item.review ? '후기 수정' : '후기 남기기'}</button>`;
+    action = `<a class="pill" href="#applications/review/${encodeURIComponent(item.applicationId)}">${item.review ? '후기 수정' : '후기 남기기'}</a>`;
   }
   return `<article class="application-row" id="application-${id}" data-application-id="${id}" tabindex="-1">
     <div><h2>${escapeText(item.programTitle ?? program?.title ?? '프로그램')}

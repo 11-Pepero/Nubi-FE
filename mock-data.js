@@ -253,10 +253,16 @@ const mockActivity = (() => {
       if (item?.status !== 'SUBMITTED') throw new Error('접수 완료로 표시할 수 없는 신청이에요.');
       item.status = 'RECEIVED';
     },
+    async saveApplicationReviewDraft(id, review) {
+      const item = applications.find(entry => entry.applicationId === id);
+      if (item?.status !== 'ATTENDED') throw new Error('참여를 마친 신청에만 후기를 남길 수 있어요.');
+      item.reviewDraft = structuredClone(review);
+    },
     async saveApplicationReview(id, review) {
       const item = applications.find(entry => entry.applicationId === id);
       if (item?.status !== 'ATTENDED') throw new Error('참여를 마친 신청에만 후기를 남길 수 있어요.');
-      item.review = review;
+      item.review = structuredClone(review);
+      delete item.reviewDraft;
     },
     async saveEvent(id, values) {
       const item = events.find(entry => entry.eventId === id);

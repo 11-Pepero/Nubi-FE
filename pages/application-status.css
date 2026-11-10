@@ -32,7 +32,6 @@
 .application-actions [data-program] { background: color-mix(in srgb, var(--line) 44%, var(--panel)); border-color: transparent; color: inherit; }
 .application-note { margin-top: 15px; }
 .application-status [role="alert"]:not(:empty) { margin: 6px 0; color: #a02828; }
-.application-review textarea { font: inherit; resize: vertical; }
 @media (max-width: 1050px) {
   .application-row { grid-template-columns: minmax(0, 1fr) minmax(90px, auto) max-content; }
   .application-steps, .application-inactive { grid-column: 1 / 3; }

@@ -1,4 +1,5 @@
 import { renderApplicationStatus } from './pages/application-status.js';
+import { renderApplicationReview } from './pages/application-review.js';
 import { renderProgramDiscovery } from './pages/program-discovery.js';
 
 import { care, groupOptions, groups, loadSupport, openEditor, showPanel } from './pages/support-management.js';
@@ -183,6 +184,35 @@ function renderPage(focus = true) {
       refreshApplications: async () => { applications = await mockActivity.getApplications(); },
     });
   } else if (page === 'applications') {
+    if (id === 'review') {
+      const item = applications.find(entry => String(entry.applicationId) === group && entry.status === 'ATTENDED');
+      if (!item) {
+        otherContent.innerHTML = '<p class="empty">후기를 작성할 수 있는 신청을 찾지 못했어요.</p><p><a class="pill" href="#applications">신청 현황으로 돌아가기</a></p>';
+        if (focus) byId('other-title').focus();
+        return;
+      }
+      const reviewHash = location.hash;
+      byId('other-title').hidden = true;
+      byId('other-page').setAttribute('aria-labelledby', 'review-title');
+      document.title = '후기 남기기 | Nubi';
+      renderApplicationReview(otherContent, {
+        item,
+        program: programs.find(program => program.programId === item.programId),
+        organization: applicationProfile.name,
+        escapeText,
+        saveDraft: async review => {
+          await mockActivity.saveApplicationReviewDraft(item.applicationId, review);
+          applications = await mockActivity.getApplications();
+        },
+        publish: async review => {
+          await mockActivity.saveApplicationReview(item.applicationId, review);
+          applications = await mockActivity.getApplications();
+          if (location.hash === reviewHash) location.hash = `applications/${encodeURIComponent(item.applicationId)}`;
+        },
+      });
+      if (focus) byId('review-title').focus();
+      return;
+    }
     const update = operation => async (...args) => {
       await operation(...args);
       applications = await mockActivity.getApplications();
@@ -191,7 +221,6 @@ function renderPage(focus = true) {
     renderApplicationStatus(otherContent, {
       applications, programs, escapeText,
       markReceived: update(mockActivity.markApplicationReceived),
-      saveReview: update(mockActivity.saveApplicationReview),
     });
   } else if (page === 'events') {
     otherContent.innerHTML = `
