@@ -180,9 +180,6 @@ a.pill { display: inline-block; }
 .dark .notification-row.warning.unread .notification-meta strong { color: #ffce7c; }
 .dark .notification-filters button[aria-pressed="true"] { background: #e7e9ff; color: #202637; }
 #details-content { margin-bottom: 16px; }
-.area-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
-.area-marker { display: grid; gap: 6px; text-align: left; border: 1px solid var(--line); color: inherit; }
-.area-marker:hover { border-color: var(--blue); }
 :root.dark { color-scheme: dark; background: #151922; color: #f0f3f9; --surface: #1b2230; --panel: #242d3b; --line: #414c60; --muted: #b5bfd2; --link: #9cbaff; }
 .dark :is(.prepare, .tag, .tip, .pill:not(.primary), dialog) { background: var(--surface); color: inherit; }
 .dark .sidebar .prepare[aria-current="page"] {
