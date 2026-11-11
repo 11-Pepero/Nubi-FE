@@ -39,7 +39,7 @@ export function mountLanding(container) {
           <a href="#landing-steps">이용 방법</a>
           <a href="#landing-faq">자주 묻는 질문</a>
           <a href="#login">로그인</a>
-          <button type="button" class="landing-button" data-landing-access>기관 가입하기</button>
+          <a class="landing-button" href="#signup">기관 가입하기</a>
         </nav>
       </header>
       <section class="landing-hero" aria-labelledby="landing-title">
@@ -48,7 +48,7 @@ export function mountLanding(container) {
           <h1 id="landing-title">함께 갈 수 있는 곳,<br>이제 묻지 않고 바로 찾아요</h1>
           <p class="landing-intro">기관이 이용자 지원 정보를 한 번 등록하면, 참여할 수 있는 프로그램만 골라 보여주고<br>신청서와 문의문까지 준비해 드려요.</p>
           <div class="landing-actions">
-            <button type="button" class="landing-button" data-landing-access>우리 기관 시작하기</button>
+            <a class="landing-button" href="#signup">우리 기관 시작하기</a>
             <a class="landing-button landing-outline" href="#landing-demo">프로그램 둘러보기</a>
           </div>
         </div>
@@ -75,22 +75,8 @@ export function mountLanding(container) {
       </section>
       <section class="landing-wrap landing-end">
         <h2>다음 나들이는<br>함께 갈 수 있는 곳으로</h2>
-        <button type="button" class="landing-button" data-landing-access>우리 기관 시작하기</button>
+        <a class="landing-button" href="#signup">우리 기관 시작하기</a>
       </section>
     </main>
-    <footer class="landing-footer"><div class="landing-wrap"><a href="#landing"><strong>함께가요 용인</strong></a><span>Nubi · 다양한 복지 기회를 누비다</span></div></footer>
-    <dialog class="landing-access" aria-labelledby="landing-access-title">
-      <h2 id="landing-access-title">기관 서비스 미리보기</h2>
-      <p>로그인과 기관 가입은 아직 연결되지 않았어요. 예시 데이터로 기관 화면을 둘러볼 수 있어요.</p>
-      <div class="landing-actions">
-        <form method="dialog"><button type="submit" class="landing-button landing-outline">닫기</button></form>
-        <a href="#support" class="landing-button">기관 화면 둘러보기</a>
-      </div>
-    </dialog>`;
-
-  const dialog = container.querySelector('dialog');
-  for (const button of container.querySelectorAll('[data-landing-access]')) {
-    button.addEventListener('click', () => dialog.showModal());
-  }
-  dialog.querySelector('a').addEventListener('click', () => dialog.close());
+    <footer class="landing-footer"><div class="landing-wrap"><a href="#landing"><strong>함께가요 용인</strong></a><span>Nubi · 다양한 복지 기회를 누비다</span></div></footer>`;
 }

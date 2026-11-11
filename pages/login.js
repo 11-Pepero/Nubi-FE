@@ -2,7 +2,7 @@ export function renderLogin(container, { authenticate } = {}) {
   container.innerHTML = `
     <header class="login-header">
       <a class="login-brand" href="#landing"><span class="landing-brand-mark"><img src="./nubi-logo.png" width="46" height="46" alt=""></span><strong>Nubi</strong></a>
-      <p class="login-signup"><span>처음이신가요?</span><button type="button" data-login-help="signup">기관 가입하기</button></p>
+      <p class="login-signup"><span>처음이신가요?</span><a href="#signup">기관 가입하기</a></p>
     </header>
     <main class="login-main">
       <section class="login-card" aria-labelledby="login-title">
@@ -73,7 +73,6 @@ export function renderLogin(container, { authenticate } = {}) {
     }
   });
   const help = {
-    signup: ['기관 가입하기', '기관 가입 화면을 준비하고 있어요.'],
     invite: ['초대 링크로 합류하기', '같은 기관 담당자가 보내 준 초대 링크를 열어 주세요.'],
   };
   for (const button of container.querySelectorAll('[data-login-help]')) {
