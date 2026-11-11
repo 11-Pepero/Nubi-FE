@@ -34,14 +34,15 @@ export class ApiError extends Error {
   }
 }
 
-async function send(path, { method = 'GET', body, signal, token } = {}) {
-  const headers = new Headers({ Accept: 'application/json' });
+async function send(path, { method = 'GET', body, signal, token, responseType } = {}) {
+  const headers = new Headers({ Accept: responseType === 'pdf' ? 'application/pdf, application/json' : 'application/json' });
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const isForm = body instanceof FormData;
   if (body !== undefined && !isForm) headers.set('Content-Type', 'application/json');
   const response = await fetch(`${baseUrl}${path}`, {
     method, headers, signal, body: isForm || body === undefined ? body : JSON.stringify(body),
   });
+  if (response.ok && responseType === 'pdf' && response.headers.get('Content-Type')?.startsWith('application/pdf')) return response.blob();
   const json = await response.json().catch(() => null);
   if (!response.ok || json?.success === false) {
     throw new ApiError(json?.error?.message || '요청을 처리하지 못했어요.', response.status, json?.error?.code);

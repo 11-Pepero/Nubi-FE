@@ -83,7 +83,7 @@ function isEventPhoto(url) {
   return /^(https?:\/\/|\/(?!\/)|data:image\/(?:jpeg|png|webp|heic|heif);base64,)/i.test(url);
 }
 
-export function renderEventEditor(container, { event, options, initialPlace, escapeText, save }) {
+export function renderEventEditor(container, { event, options, initialPlace, escapeText, save, generatePromotion, downloadPoster }) {
   const existingPhotos = event?.photos ?? [];
   const photos = existingPhotos.filter(url => typeof url === 'string' && isEventPhoto(url));
   const features = options?.features ?? [];
@@ -244,7 +244,22 @@ export function renderEventEditor(container, { event, options, initialPlace, esc
     const button = e.target.closest('[data-tone]');
     if (button) selectTone(button.dataset.tone);
   });
-  form.querySelector('[data-regenerate]').addEventListener('click', () => {
+  form.querySelector('[data-regenerate]').addEventListener('click', async event => {
+    if (generatePromotion) {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await generatePromotion();
+        Object.assign(promotions, { standard: result.general, easy: result.easy, message: result.sms });
+        updatePreview();
+        promotionStatus.textContent = '저장된 행사 정보로 홍보문을 작성했어요.';
+      } catch (error) {
+        promotionStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+      return;
+    }
     delete promotions[tone];
     updatePreview();
     promotionStatus.textContent = '현재 행사 정보로 홍보문을 다시 작성했어요.';
@@ -258,7 +273,24 @@ export function renderEventEditor(container, { event, options, initialPlace, esc
       promotionStatus.textContent = '선택한 홍보문을 복사해 주세요.';
     }
   });
-  form.querySelector('[data-poster]').addEventListener('click', () => {
+  form.querySelector('[data-poster]').addEventListener('click', async event => {
+    if (downloadPoster) {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const url = URL.createObjectURL(await downloadPoster(promotions.easy));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = '행사-포스터.pdf';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        promotionStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+      return;
+    }
     const poster = form.querySelector('.event-poster');
     poster.innerHTML = `<h1>${escapeText(elements.title.value || '행사 안내')}</h1>${photos.length ? `<img src="${escapeText(photos[0])}" alt="">` : ''}<p>${escapeText(promotion.value)}</p>`;
     window.print();

@@ -421,6 +421,14 @@ async function renderPage(focus = true) {
       byId('other-page').setAttribute('aria-labelledby', 'event-title');
       renderEventEditor(otherContent, {
         event, options: eventEditorOptions, initialPlace, escapeText,
+        generatePromotion: apiEnabled ? () => {
+          if (!eventId) throw new Error('행사를 먼저 임시 저장해 주세요.');
+          return apiRequest(`/events/${eventId}/promotions`, { method: 'POST' });
+        } : undefined,
+        downloadPoster: apiEnabled ? easy => {
+          if (!eventId) throw new Error('행사를 먼저 임시 저장해 주세요.');
+          return apiRequest(`/events/${eventId}/promotions/poster`, { method: 'POST', body: { easy }, responseType: 'pdf' });
+        } : undefined,
         save: async values => {
           if (apiEnabled) {
             const saved = await saveEvent(eventId, values);
