@@ -11,6 +11,7 @@ import { renderSignup } from './pages/signup.js';
 import { apiEnabled, apiRequest, getSession } from './pages/api-client.js';
 import { signIn, signOut, signUp } from './pages/auth-api.js';
 import { getProgram, getPrograms } from './pages/programs-api.js';
+import { getApplications, markApplicationReceived } from './pages/applications-api.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -54,12 +55,18 @@ async function loadActivity() {
     getPrograms().catch(error => {
       programLoadError = error.message;
       return [];
-    }), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getAccessibilityMap(), mockActivity.getEventEditorOptions(),
+    }), getApplications().catch(showApplicationError), mockActivity.getEvents(), mockActivity.getAccessibilityMap(), mockActivity.getEventEditorOptions(),
   ]);
 }
 
 let applicationProfile = {};
 let programLoadError = '';
+let applicationLoadError = '';
+
+function showApplicationError(error) {
+  applicationLoadError = error.message;
+  return [];
+}
 
 async function loadProfile() {
   let profile;
@@ -266,9 +273,14 @@ function renderPage(focus = true) {
   } else if (page === 'prepare') {
     renderApplicationPreparation(otherContent, Number(id), Number(group), {
       programs, groups, care, applicationProfile, escapeText, venueLabel, groupOptions,
-      refreshApplications: async () => { applications = await mockActivity.getApplications(); },
+      refreshApplications: async () => { applications = await getApplications(); },
     });
   } else if (page === 'applications') {
+    if (applicationLoadError) {
+      otherContent.innerHTML = '<p class="empty" role="alert"></p>';
+      otherContent.firstElementChild.textContent = applicationLoadError;
+      return;
+    }
     if (id === 'review') {
       const item = applications.find(entry => String(entry.applicationId) === group && entry.status === 'ATTENDED');
       if (!item) {
@@ -300,12 +312,12 @@ function renderPage(focus = true) {
     }
     const update = operation => async (...args) => {
       await operation(...args);
-      applications = await mockActivity.getApplications();
+      applications = await getApplications();
       if (location.hash.slice(1).split('/')[0] === 'applications') renderPage(false);
     };
     renderApplicationStatus(otherContent, {
       applications, programs, escapeText,
-      markReceived: update(mockActivity.markApplicationReceived),
+      markReceived: update(markApplicationReceived),
     });
   } else if (page === 'events') {
     const event = events.find(item => String(item.eventId) === id);
@@ -550,7 +562,12 @@ let loadedMemberId;
 function loadAccountData() {
   loadedMemberId = getSession()?.memberId;
   byId('support-error').textContent = '';
-  return Promise.all([loadSupport().catch(showSupportError), loadProfile().catch(showProfileError)]);
+  const accountRequests = [loadSupport().catch(showSupportError), loadProfile().catch(showProfileError)];
+  if (apiEnabled) {
+    applicationLoadError = '';
+    accountRequests.push(getApplications().catch(showApplicationError).then(items => { applications = items; }));
+  }
+  return Promise.all(accountRequests);
 }
 const accountReady = !apiEnabled || getSession() ? loadAccountData() : Promise.resolve();
 Promise.all([accountReady, loadActivity()]).then(() => {
