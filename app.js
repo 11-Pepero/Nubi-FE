@@ -1,4 +1,4 @@
-import { getEvents, saveEvent, getEventApplicants, getEventApplicant, saveEventApplicant } from './pages/events-api.js';
+import { getEvents, saveEvent, getEventApplicants, getEventApplicant, saveEventApplicant, getEventNeeds, saveEventNeed, getEventReviews, postEventReviewReply, getEventEditorData, saveEventPhotos } from './pages/events-api.js';
 import { notificationApi } from './pages/notifications-api.js';
 import { getAccessibilityMap } from './pages/accessibility-map-api.js';
 import { renderEventEditor, renderEventList } from './pages/event-management.js';
@@ -335,10 +335,14 @@ async function renderPage(focus = true) {
   } else if (page === 'events') {
     const route = location.hash;
     let event = events.find(item => String(item.eventId) === id);
-    if (apiEnabled && (eventLoadError || (event && group === 'applications'))) {
+    if (apiEnabled && (eventLoadError || (event && ['applications', 'reviews'].includes(group)))) {
       try {
         if (eventLoadError) throw new Error(eventLoadError);
-        event = { ...event, applicants: await getEventApplicants(event.eventId) };
+        const [applicants, needs, reviews] = await Promise.all([
+          getEventApplicants(event.eventId), getEventNeeds(event.eventId),
+          getEventReviews(event.eventId).catch(error => ({ reviewError: error.message })),
+        ]);
+        event = { ...event, applicants, ...needs, ...reviews };
       } catch (error) {
         if (location.hash === route) otherContent.textContent = error.message;
         return;
@@ -351,13 +355,24 @@ async function renderPage(focus = true) {
       renderEventApplicants(otherContent, {
         event, escapeText, initialSection: group,
         saveReviewReply: async (index, reply) => {
-          if (apiEnabled) throw new Error('후기 답글 API 연결이 필요해요.');
+          if (apiEnabled) {
+            const review = event.reviews[index];
+            const response = await postEventReviewReply(review.reviewId, reply);
+            review.reply = response.content;
+            event.reviewStats.awaitingReplyCount = Math.max(0, event.reviewStats.awaitingReplyCount - 1);
+            return event.reviews;
+          }
           const reviews = await mockActivity.saveEventReviewReply(event.eventId, index, reply);
           events = await mockActivity.getEvents();
           return reviews;
         },
         savePreparationTask: async (taskId, ready) => {
-          if (apiEnabled) throw new Error('행사 지원 준비 항목 API 연결이 필요해요.');
+          if (apiEnabled) {
+            const task = event.preparationTasks.find(item => String(item.id) === taskId);
+            const needs = await saveEventNeed(event.eventId, task, ready);
+            Object.assign(event, needs);
+            return needs.preparationTasks;
+          }
           const tasks = await mockActivity.saveEventPreparationTask(event.eventId, taskId, ready);
           events = await mockActivity.getEvents();
           return tasks;
@@ -385,13 +400,32 @@ async function renderPage(focus = true) {
       return;
     } else {
       const eventHash = location.hash;
+      let eventId = event?.eventId;
+      let savedImages = new Map();
+      if (apiEnabled && event) {
+        try {
+          const detail = await getEventEditorData(eventId);
+          savedImages = new Map(detail.images.map(image => [image.url, image.imageId]));
+          event = { ...event, ...detail, status: event.status, notes: detail.description, photos: [...savedImages.keys()] };
+        } catch (error) {
+          if (location.hash === eventHash) otherContent.textContent = error.message;
+          return;
+        }
+        if (location.hash !== eventHash) return;
+      }
       const initialPlace = accessibilityMap?.districts.find(district => district.id === group)?.name;
       byId('other-title').hidden = true;
       byId('other-page').setAttribute('aria-labelledby', 'event-title');
       renderEventEditor(otherContent, {
         event, options: eventEditorOptions, initialPlace, escapeText,
         save: async values => {
-          await (apiEnabled ? saveEvent : mockActivity.saveEvent)(event?.eventId ?? null, values);
+          if (apiEnabled) {
+            const saved = await saveEvent(eventId, values);
+            eventId = saved.programId;
+            await saveEventPhotos(eventId, values.photos, savedImages);
+          } else {
+            await mockActivity.saveEvent(eventId ?? null, values);
+          }
           await loadEvents();
           if (location.hash === eventHash) location.hash = values.status === 'DRAFT' ? 'events/list/drafts' : 'events';
         },

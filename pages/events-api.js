@@ -40,7 +40,7 @@ function toApplicant(item) {
     status: item.status === 'SUBMITTED' ? 'NEW' : item.status,
     supportNeeds: supports.map(support => support.label),
     supportChecklist: supports.map(support => ({
-      id: support.applicationSupportId, label: support.label, ready: support.prepStatus === 'READY',
+      id: support.applicationSupportId, label: support.label, note: support.hostNote, ready: support.prepStatus === 'READY',
     })),
     wheelchairCount: supports.find(support => support.code === 'WHEELCHAIR')?.quantity ?? 0,
     individualCareCount: item.careCount ?? item.cares?.length,
@@ -70,6 +70,107 @@ export async function saveEventApplicant(eventId, applicant, changes) {
   const support = changes.supportChecklist?.find((item, index) => item.ready !== applicant.supportChecklist[index]?.ready);
   if (!support) return applicant;
   return toApplicant(await apiRequest(`${path}/supports/${support.id}`, {
-    method: 'PATCH', body: { prepStatus: support.ready ? 'READY' : 'PENDING' },
+    method: 'PATCH', body: { prepStatus: support.ready ? 'READY' : 'PENDING', hostNote: support.note },
   }));
+}
+
+export async function getEventNeeds(eventId) {
+  const { items, cares, arrivals } = await apiRequest(`/events/${eventId}/needs`);
+  return {
+    preparationTasks: items.map(item => ({
+      id: item.supportTagId,
+      label: `${item.label} · ${item.totalQuantity}`,
+      note: item.hostNotes.join(' · '),
+      ready: item.prepStatus === 'READY',
+      groups: item.breakdown.map(row => `${row.organizationName} ${row.quantity}`),
+      breakdown: item.breakdown,
+    })),
+    supportOverview: {
+      cares: cares.map(item => ({ name: item.alias, organization: item.organizationName, title: item.content })),
+      arrivals: arrivals.map(item => ({ ...item, organization: item.organizationName })),
+    },
+  };
+}
+
+export async function saveEventNeed(eventId, task, ready) {
+  const prepStatus = ready ? 'READY' : 'PENDING';
+  const updates = task.breakdown.filter(row => row.prepStatus !== prepStatus);
+  const results = await Promise.allSettled(updates.map(async row => {
+    const path = `/events/${eventId}/applications/${row.applicationId}`;
+    const applicant = await apiRequest(path);
+    const support = applicant.supports.find(item => item.applicationSupportId === row.applicationSupportId);
+    if (!support) throw new Error('지원 항목을 찾을 수 없어요.');
+    await apiRequest(`${path}/supports/${row.applicationSupportId}`, {
+      method: 'PATCH', body: { prepStatus, hostNote: support.hostNote },
+    });
+  }));
+  return {
+    ...await getEventNeeds(eventId),
+    preparationError: results.find(result => result.status === 'rejected')?.reason.message,
+  };
+}
+
+const reactionLabels = {
+  ENJOYED: '즐거워했어요',
+  WANT_AGAIN: '다시 가고 싶어요',
+  HAD_DIFFICULTY: '조금 힘들어했어요',
+  SHORT_BREAKS: '쉬는 시간이 부족했어요',
+  LONG_DISTANCE: '이동 거리가 길었어요',
+};
+
+export async function getEventReviews(eventId) {
+  const reviews = [];
+  for (let page = 0; ; page++) {
+    const result = await apiRequest(`/events/${eventId}/reviews?page=${page}&size=100`);
+    reviews.push(...result.reviews.content.map(review => ({
+      ...review,
+      organization: review.organizationName,
+      comment: review.content,
+      photos: review.imageUrls,
+      reply: review.reply?.content,
+      checks: review.checks.map(check => ({ ...check, met: check.answer === 'YES' })),
+      reactions: review.reactions.map(reaction => reactionLabels[reaction] ?? reaction),
+    })));
+    if (page + 1 >= result.reviews.totalPages) {
+      return {
+        reviews,
+        reviewStats: result.stats,
+        reviewChecks: result.checks,
+        reviewReactions: result.reactions.map(item => ({ ...item, label: reactionLabels[item.reaction] ?? item.reaction })),
+      };
+    }
+  }
+}
+
+export function postEventReviewReply(reviewId, content) {
+  return apiRequest(`/reviews/${reviewId}/reply`, { method: 'POST', body: { content } });
+}
+
+export function getEventEditorData(eventId) {
+  return apiRequest(`/programs/${eventId}`);
+}
+
+export async function saveEventPhotos(eventId, photos, savedImages) {
+  const path = `/events/${eventId}/images`;
+  for (const [url, imageId] of savedImages) {
+    if (photos.includes(url)) continue;
+    await apiRequest(`${path}/${imageId}`, { method: 'DELETE' });
+    savedImages.delete(url);
+  }
+  for (const url of photos) {
+    if (savedImages.has(url)) continue;
+    const file = await (await fetch(url)).blob();
+    const form = new FormData();
+    form.append('images', file, `event.${file.type.split('/')[1]}`);
+    const images = await apiRequest(path, { method: 'POST', body: form });
+    const knownIds = new Set(savedImages.values());
+    const added = images.find(image => !knownIds.has(image.imageId));
+    if (!added) throw new Error('저장한 사진을 확인하지 못했어요.');
+    savedImages.set(url, added.imageId);
+  }
+  if (photos.length) {
+    await apiRequest(`${path}/order`, {
+      method: 'PATCH', body: { imageIds: photos.map(url => savedImages.get(url)) },
+    });
+  }
 }

@@ -3,6 +3,10 @@ const modes = [['recent', '최신순'], ['low', '별점 낮은 순'], ['photos',
 const photos = review => (review.photos ?? []).filter(url => typeof url === 'string' && /^(https?:\/\/|data:image\/(?:png|jpeg|webp);base64,)/i.test(url));
 
 export function renderReceivedReviews(container, { event, escapeText, saveReply }) {
+  if (event.reviewError) {
+    container.textContent = event.reviewError;
+    return;
+  }
   let reviews = event.reviews ?? [];
   let mode = 'recent';
   const gallery = reviews.flatMap(photos);
@@ -11,7 +15,8 @@ export function renderReceivedReviews(container, { event, escapeText, saveReply 
   const update = () => {
     const ratings = reviews.map(review => Number(review.rating)).filter(rating => rating >= 1 && rating <= 5);
     const average = ratings.length ? (ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length).toFixed(1) : '—';
-    const metrics = [['참여 기관', `${event.applicationOrgCount ?? 0}곳`], ['참여 인원', `${event.participantCount ?? 0}명`], ['평균 별점', average], ['받은 후기', `${reviews.length}개`], ['답글 기다림', `${reviews.filter(review => !review.reply).length}개`]];
+    const stats = event.reviewStats;
+    const metrics = [['참여 기관', `${stats?.organizationCount ?? event.applicationOrgCount ?? 0}곳`], ['참여 인원', `${stats?.participantCount ?? event.participantCount ?? 0}명`], ['평균 별점', stats?.averageRating?.toFixed(1) ?? average], ['받은 후기', `${stats?.reviewCount ?? reviews.length}개`], ['답글 기다림', `${stats?.awaitingReplyCount ?? reviews.filter(review => !review.reply).length}개`]];
     const visible = reviews.map((review, index) => ({ review, index }))
       .filter(({ review }) => mode !== 'photos' || photos(review).length)
       .sort((a, b) => {
@@ -29,6 +34,16 @@ export function renderReceivedReviews(container, { event, escapeText, saveReply 
       }
       for (const reaction of review.reactions ?? []) reactions.set(reaction, (reactions.get(reaction) ?? 0) + 1);
     }
+    if (event.reviewChecks) {
+      checks.clear();
+      for (const check of event.reviewChecks) {
+        checks.set(check.label, { yes: check.yesCount, total: check.yesCount + check.noCount + check.unknownCount });
+      }
+    }
+    if (event.reviewReactions) {
+      reactions.clear();
+      for (const item of event.reviewReactions) reactions.set(item.label, item.count);
+    }
     container.innerHTML = `
       <div class="event-summary event-applicant-summary">${metrics.map(([label, value]) => `<div><span>${label}</span><strong>${escapeText(value)}</strong></div>`).join('')}</div>
       <div class="event-reviews-layout">
@@ -41,7 +56,7 @@ export function renderReceivedReviews(container, { event, escapeText, saveReply 
               <p class="event-muted">${escapeText([review.participantCount != null && `이용자 ${review.participantCount}명`, review.companionCount != null && `동반 ${review.companionCount}명`].filter(Boolean).join(', '))}</p>
               <p>${escapeText(review.comment)}</p>
               ${photos(review).length ? `<div class="event-review-photos">${photos(review).map(photoMarkup).join('')}</div>` : ''}
-              <div class="event-review-tags">${(review.checks ?? []).map(check => `<span data-met="${Boolean(check.met)}">${escapeText(check.label)} ${check.met ? '그랬어요' : '아니었어요'}</span>`).join('')}</div>
+              <div class="event-review-tags">${(review.checks ?? []).map(check => `<span data-met="${Boolean(check.met)}">${escapeText(check.label)} ${check.answer === 'UNKNOWN' ? '몰라요' : check.met ? '그랬어요' : '아니었어요'}</span>`).join('')}</div>
               ${review.reply ? `<div class="event-review-reply"><strong>우리 센터 답글</strong><p>${escapeText(review.reply)}</p></div>` : `<button class="text-button link" type="button" data-review-reply="${index}">답글 달기</button>`}
             </article>`;
           }).join('') || '<p class="empty">표시할 후기가 없어요.</p>'}</div>
