@@ -8,6 +8,8 @@ import { mountLanding } from './pages/landing.js';
 import { renderProgramDemo } from './pages/program-demo.js';
 import { renderLogin, renderPasswordReset } from './pages/login.js';
 import { renderSignup } from './pages/signup.js';
+import { apiEnabled, apiRequest, getSession } from './pages/api-client.js';
+import { signIn, signOut, signUp } from './pages/auth-api.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -55,7 +57,15 @@ async function loadActivity() {
 let applicationProfile = {};
 
 async function loadProfile() {
-  const { organizationName, memberName } = (await mockActivity.getProfile()) ?? {};
+  let profile;
+  if (apiEnabled) {
+    if (!getSession()) return;
+    const organization = await apiRequest('/organizations/me');
+    profile = { organizationName: organization.name, memberName: organization.member?.name || organization.member?.email };
+  } else {
+    profile = await mockActivity.getProfile();
+  }
+  const { organizationName, memberName } = profile ?? {};
   const name = organizationName?.trim();
   const member = memberName?.trim();
   applicationProfile = { name, member };
@@ -172,9 +182,9 @@ function renderPage(focus = true) {
     for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
     document.querySelector('#notification-panel:popover-open')?.hidePopover();
     document.title = `${route === 'signup' ? '기관 가입' : id === 'reset' ? '비밀번호 찾기' : '로그인'} | Nubi`;
-    if (route === 'signup') renderSignup(loginPage);
-    else if (id === 'reset') renderPasswordReset(loginPage);
-    else renderLogin(loginPage);
+    if (route === 'signup') renderSignup(loginPage, { register: apiEnabled ? signUp : undefined });
+    else if (id === 'reset') renderPasswordReset(loginPage, { apiEnabled });
+    else renderLogin(loginPage, { authenticate: apiEnabled ? signIn : undefined });
     window.scrollTo(0, 0);
     return;
   }
@@ -205,6 +215,13 @@ function renderPage(focus = true) {
     else window.scrollTo(0, 0);
     return;
   }
+  if (apiEnabled && !getSession()) {
+    byId('dashboard-sidebar').hidden = true;
+    byId('dashboard-main').hidden = true;
+    location.replace('#login');
+    return;
+  }
+  if (apiEnabled && !applicationProfile.name) loadProfile().catch(showProfileError);
   if (wasLanding) window.scrollTo(0, 0);
   const groupAnchor = /^group-\d+$/.test(route);
   const page = Object.hasOwn(pageTitles, route) ? route : 'support';
@@ -455,8 +472,18 @@ settingsPanel.addEventListener('beforetoggle', event => {
     window.removeEventListener('scroll', positionSettingsPanel, true);
   }
 });
-settingsPanel.addEventListener('click', event => {
-  if (event.target.closest('a')) settingsPanel.hidePopover();
+settingsPanel.addEventListener('click', async event => {
+  if (!event.target.closest('a[href="#login"]')) return;
+  settingsPanel.hidePopover();
+  if (!apiEnabled) return;
+  event.preventDefault();
+  try {
+    await signOut();
+  } catch (error) {
+    console.warn('서버 로그아웃 요청 실패:', error.message);
+  }
+  applicationProfile = {};
+  location.replace('#login');
 });
 const withdrawalDialog = byId('withdrawal-dialog');
 const withdrawalActions = withdrawalDialog.querySelector('form');
@@ -468,6 +495,10 @@ byId('open-withdrawal').addEventListener('click', () => {
   withdrawalDialog.showModal();
 });
 byId('confirm-withdrawal').addEventListener('click', () => {
+  if (apiEnabled) {
+    byId('withdrawal-title').textContent = '계정 탈퇴를 아직 지원하지 않아요';
+    return;
+  }
   withdrawalActions.hidden = true;
   byId('withdrawal-title').textContent = '탈퇴되었습니다';
   const currentRoute = location.hash;
@@ -491,9 +522,10 @@ const isPublicRoute = () => {
 };
 if (isPublicRoute()) renderPage(false);
 
-const profileReady = loadProfile().catch(() => {
+function showProfileError() {
   byId('profile-organization').textContent = '기관 정보를 불러오지 못했어요';
-});
+}
+const profileReady = loadProfile().catch(showProfileError);
 Promise.all([loadSupport(), loadActivity(), profileReady]).then(() => {
   if (!isPublicRoute()) renderPage();
 });

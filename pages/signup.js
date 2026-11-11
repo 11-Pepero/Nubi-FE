@@ -7,7 +7,7 @@ const agreements = [
 const demoCode = '123456';
 const sampleAddress = '경기 용인시 처인구 금령로';
 
-export function renderSignup(container) {
+export function renderSignup(container, { register } = {}) {
   container.innerHTML = `
     <header class="login-header signup-header"><a class="login-brand" href="#landing"><span class="landing-brand-mark"><img src="./nubi-logo.png" width="46" height="46" alt=""></span><strong>Nubi</strong></a><p class="login-signup">이미 계정이 있나요? <a href="#login">로그인</a></p></header>
     <main class="signup-main">
@@ -66,6 +66,21 @@ export function renderSignup(container) {
   const steps = [...container.querySelectorAll('[data-signup-step]')];
   const indicators = [...container.querySelectorAll('.signup-steps li')];
   const [organization, account] = steps;
+  const signupButton = account.querySelector('button[type="submit"]');
+  const typeCodes = ['DAY_CARE', 'WELFARE_CENTER', 'GROUP_HOME', 'WORKSHOP', 'PUBLIC'];
+  if (register) {
+    organization.querySelector('[data-address-search]').hidden = true;
+    organization.elements.participantCount.closest('.login-field').hidden = true;
+    organization.elements.participantCount.disabled = true;
+    organization.elements.organizationPhone.maxLength = 20;
+    organization.elements.organizationType[5].closest('label').hidden = true;
+    account.querySelector('.signup-pair').hidden = true;
+    account.elements.name.disabled = true;
+    account.elements.phone.disabled = true;
+    account.querySelector('[data-send-code]').hidden = true;
+    account.elements.email.maxLength = 100;
+    account.elements.password.maxLength = 64;
+  }
   const dialog = container.querySelector('dialog');
   const showDialog = (title, message) => {
     dialog.querySelector('h2').textContent = title;
@@ -115,6 +130,7 @@ export function renderSignup(container) {
   const send = account.querySelector('[data-send-code]');
   let sentTo = '';
   let verifiedEmail = '';
+  let submitting = false;
   const showError = message => {
     error.textContent = message;
     error.hidden = false;
@@ -161,10 +177,11 @@ export function renderSignup(container) {
   account.querySelectorAll('[data-agreement-details]').forEach(button => {
     button.addEventListener('click', () => showDialog(...agreements[Number(button.dataset.agreementDetails)]));
   });
-  account.addEventListener('submit', event => {
+  account.addEventListener('submit', async event => {
     event.preventDefault();
+    if (submitting) return;
     error.hidden = true;
-    if (!verifiedEmail || verifiedEmail !== email.value.trim()) {
+    if (!register && (!verifiedEmail || verifiedEmail !== email.value.trim())) {
       showError('이메일 인증을 먼저 완료해 주세요.');
       send.focus();
       return;
@@ -179,6 +196,27 @@ export function renderSignup(container) {
       showError('비밀번호가 서로 달라요.');
       confirm.focus();
       return;
+    }
+    if (register) {
+      submitting = true;
+      signupButton.disabled = true;
+      try {
+        const fields = organization.elements;
+        await register({
+          orgName: fields.organizationName.value.trim(),
+          type: typeCodes[organizationTypes.indexOf(fields.organizationType.value)],
+          address: fields.address.value.trim(),
+          phone: fields.organizationPhone.value.trim(),
+          email: email.value.trim(),
+          password: password.value,
+        });
+      } catch (failure) {
+        showError(failure.message);
+        return;
+      } finally {
+        submitting = false;
+        signupButton.disabled = false;
+      }
     }
     account.reset();
     organization.reset();
