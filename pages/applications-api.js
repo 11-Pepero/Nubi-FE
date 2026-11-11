@@ -31,3 +31,8 @@ export async function prepareApplication({ received, ...body }, direct) {
   if (received) await markApplicationReceived(prepared.application.applicationId);
   return prepared;
 }
+
+export function cancelApplication(id) {
+  if (!apiEnabled) return mockActivity.cancelApplication(id);
+  return apiRequest(`/applications/${id}/cancel`, { method: 'PATCH' });
+}

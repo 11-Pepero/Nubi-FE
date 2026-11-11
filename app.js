@@ -15,7 +15,7 @@ import { renderSignup } from './pages/signup.js';
 import { apiEnabled, apiRequest, getSession } from './pages/api-client.js';
 import { signIn, signOut, signUp } from './pages/auth-api.js';
 import { getProgram, getPrograms } from './pages/programs-api.js';
-import { getApplications, markApplicationReceived } from './pages/applications-api.js';
+import { getApplications, markApplicationReceived, cancelApplication } from './pages/applications-api.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -333,6 +333,7 @@ async function renderPage(focus = true) {
     renderApplicationStatus(otherContent, {
       applications, programs, escapeText,
       markReceived: update(markApplicationReceived),
+      cancel: update(cancelApplication),
     });
   } else if (page === 'events') {
     const route = location.hash;
