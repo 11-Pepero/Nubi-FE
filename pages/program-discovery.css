@@ -42,7 +42,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: var(--program-radius);
+  border-radius: var(--program-radius, 14px);
   background: var(--panel);
 }
 .discovery-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--surface, white); color: var(--muted); }
@@ -57,7 +57,7 @@
 .discovery-details { width: 28px; height: 28px; color: var(--muted); }
 .discovery .discovery-action { display: inline-flex; align-items: center; justify-content: center; width: 84px; height: 28px; padding: 0 8px; line-height: 1; white-space: nowrap; }
 .discovery-footer, .discovery-status-group, .discovery-actions { display: contents; }
-.discovery-results[data-view="grid"] { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--program-gap); }
+.discovery-results[data-view="grid"] { grid-template-columns: repeat(auto-fill, minmax(min(100%, max(260px, calc((100% - 72px) / 4))), 1fr)); gap: 24px; }
 .discovery-results[data-view="grid"] .discovery-row { grid-template-columns: 32px minmax(0, 1fr); grid-template-rows: auto 1fr auto; }
 .discovery-results[data-view="grid"] .discovery-name { grid-column: 2 / -1; }
 .discovery-results[data-view="grid"] :is(.discovery-tags, .discovery-footer) { grid-column: 1 / -1; }

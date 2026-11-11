@@ -154,6 +154,9 @@ function notificationTime(value) {
 }
 
 function notificationTarget(item) {
+  if (item.type === 'NEW_APPLICATION' || item.targetType === 'REVIEW') {
+    return { page: 'events', label: item.targetType === 'REVIEW' ? '후기 보기' : '신청 보기' };
+  }
   if (item.type === 'CARE_CHANGED') return { page: 'eligible', label: '프로그램 보기' };
   if (item.targetType === 'APPLICATION') {
     return { page: item.targetId == null ? 'applications' : `applications/${encodeURIComponent(item.targetId)}`, label: '신청 보기' };
@@ -161,8 +164,25 @@ function notificationTarget(item) {
   if (item.targetType === 'PROGRAM') {
     return { page: item.targetId == null ? 'programs' : `programs/${encodeURIComponent(item.targetId)}`, label: '프로그램 보기' };
   }
+  if (item.type === 'APPLICATION_DECIDED') return { page: 'applications', label: '신청 보기' };
+  if (['DEADLINE', 'NEW_PROGRAM'].includes(item.type)) return { page: 'programs', label: '프로그램 보기' };
   return null;
 }
+
+async function resolveNotificationPage(item, fallback) {
+  if (item.targetId == null || (item.type !== 'NEW_APPLICATION' && item.targetType !== 'REVIEW')) return fallback;
+  const review = item.targetType === 'REVIEW';
+  for (const event of events.filter(event => event.status !== 'DRAFT')) {
+    const entries = apiEnabled
+      ? review ? (await getEventReviews(event.eventId)).reviews : await getEventApplicants(event.eventId)
+      : review ? event.reviews : event.applicants;
+    if (entries?.some(entry => String(review ? entry.reviewId : entry.applicationId) === String(item.targetId))) {
+      return `events/${event.eventId}/${review ? 'reviews' : 'applications'}/${encodeURIComponent(item.targetId)}`;
+    }
+  }
+  return fallback;
+}
+
 function renderNotifications() {
   const unread = unreadCount;
   byId('unread-count').textContent = unread;
@@ -173,7 +193,7 @@ function renderNotifications() {
     if (notificationFilter !== 'all' && notificationFilter !== category) return '';
     const target = notificationTarget(item);
     const [message, ...details] = (item.body ?? '').split('\n');
-    return `<li class="notification-row ${tone}${item.read ? '' : ' unread'}">
+    return `<li ${target ? 'data-notification-row' : ''} class="notification-row ${tone}${item.read ? '' : ' unread'}">
       <span class="notification-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${notificationIcons[tone]}</svg></span>
       <div class="notification-copy">
         <div class="notification-meta"><strong>${escapeText(item.title)}</strong>
@@ -392,7 +412,13 @@ async function renderPage(focus = true) {
           await loadEvents();
         },
       });
-      if (focus) byId('event-applicant-title').focus();
+      const targetId = route.slice(1).split('/')[3];
+      if (targetId && group === 'applications') {
+        const index = event.applicants?.findIndex(entry => String(entry.applicationId) === targetId);
+        if (index >= 0) otherContent.querySelector(`[data-applicant-index="${index}"]`)?.click();
+      } else if (targetId && group === 'reviews') {
+        otherContent.querySelector(`[data-review-id="${CSS.escape(targetId)}"]`)?.focus();
+      } else if (focus) byId('event-applicant-title').focus();
       return;
     }
     if (id !== 'new' && !event) {
@@ -492,7 +518,7 @@ notificationPanel.addEventListener('click', async event => {
 
   const readAll = event.target.closest('[data-read-all]');
   const history = event.target.closest('.notification-history');
-  const link = event.target.closest('[data-notification]');
+  const link = event.target.closest('[data-notification]') ?? event.target.closest('[data-notification-row]')?.querySelector('[data-notification]');
   if (link) event.preventDefault();
   if (notificationBusy || !(readAll || history || link)) return;
   notificationBusy = true;
@@ -524,13 +550,13 @@ notificationPanel.addEventListener('click', async event => {
       const current = notifications.find(item => item.notificationId === id);
       if (!current) return;
       const item = current.read ? current : await notificationApi.readNotification(id);
-      const target = notificationTarget(item);
+      const target = await resolveNotificationPage(current, link.hash.slice(1)).catch(() => link.hash.slice(1));
       notifications = notifications.map(entry => entry.notificationId === id ? item : entry);
       ({ unreadCount } = await notificationApi.getUnreadCount());
       renderNotifications();
       notificationPanel.hidePopover();
-      if (location.hash === `#${target.page}`) renderPage();
-      else location.hash = target.page;
+      if (location.hash === `#${target}`) renderPage();
+      else location.hash = target;
     }
   } catch (error) {
     errorMessage.textContent = error.message;
@@ -541,7 +567,7 @@ notificationPanel.addEventListener('click', async event => {
 notificationPanel.addEventListener('beforetoggle', event => {
   if (event.newState !== 'open') return;
   const { right, bottom } = byId('open-notifications').getBoundingClientRect();
-  notificationPanel.style.setProperty('--notification-left', `${Math.max(8, Math.min(right - 32, document.documentElement.clientWidth - 470))}px`);
+  notificationPanel.style.setProperty('--notification-anchor', (right - 32) + 'px');
   notificationPanel.style.setProperty('--notification-top', `${bottom + 8}px`);
 });
 renderNotifications();
@@ -551,10 +577,14 @@ document.querySelector('.sidebar').addEventListener('click', event => {
 });
 byId('toggle-menu').addEventListener('click', event => {
   const button = event.currentTarget;
-  const sidebarContent = byId('sidebar-content');
-  sidebarContent.hidden = !sidebarContent.hidden;
-  button.setAttribute('aria-expanded', String(!sidebarContent.hidden));
-  button.setAttribute('aria-label', sidebarContent.hidden ? '메뉴 펼치기' : '메뉴 접기');
+  const collapsed = document.body.classList.toggle('sidebar-collapsed');
+  byId('dashboard-sidebar').inert = collapsed;
+  if (collapsed) {
+    notificationPanel.hidePopover();
+    settingsPanel.hidePopover();
+  }
+  button.setAttribute('aria-expanded', String(!collapsed));
+  button.setAttribute('aria-label', collapsed ? '메뉴 펼치기' : '메뉴 접기');
 });
 const settingsButton = byId('account-settings');
 const settingsPanel = byId('account-settings-panel');
