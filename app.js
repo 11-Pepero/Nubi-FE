@@ -1,3 +1,4 @@
+import { createReviewPublisher, getReviewDraft, saveReviewDraft } from './pages/application-reviews-api.js';
 import { getEvents, saveEvent, getEventApplicants, getEventApplicant, saveEventApplicant, getEventNeeds, saveEventNeed, getEventReviews, postEventReviewReply, getEventEditorData, saveEventPhotos } from './pages/events-api.js';
 import { notificationApi } from './pages/notifications-api.js';
 import { getAccessibilityMap } from './pages/accessibility-map-api.js';
@@ -305,18 +306,19 @@ async function renderPage(focus = true) {
       byId('other-title').hidden = true;
       byId('other-page').setAttribute('aria-labelledby', 'review-title');
       document.title = '후기 남기기 | Nubi';
+      const publishReview = createReviewPublisher(item);
       renderApplicationReview(otherContent, {
-        item,
+        item: { ...item, reviewDraft: apiEnabled ? getReviewDraft(item.applicationId) : item.reviewDraft },
         program: programs.find(program => program.programId === item.programId),
         organization: applicationProfile.name,
         escapeText,
         saveDraft: async review => {
-          await mockActivity.saveApplicationReviewDraft(item.applicationId, review);
-          applications = await mockActivity.getApplications();
+          await saveReviewDraft(item.applicationId, review);
+          if (!apiEnabled) applications = await getApplications();
         },
         publish: async review => {
-          await mockActivity.saveApplicationReview(item.applicationId, review);
-          applications = await mockActivity.getApplications();
+          await publishReview(review);
+          applications = await getApplications();
           if (location.hash === reviewHash) location.hash = `applications/${encodeURIComponent(item.applicationId)}`;
         },
       });
