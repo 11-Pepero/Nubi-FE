@@ -1,6 +1,6 @@
 import { createReviewPublisher, getReviewDraft, saveReviewDraft } from './pages/application-reviews-api.js';
 import { getEvents, saveEvent, getEventApplicants, getEventApplicant, saveEventApplicant, getEventNeeds, saveEventNeed, getEventReviews, postEventReviewReply, getEventEditorData, saveEventPhotos } from './pages/events-api.js';
-import { notificationApi } from './pages/notifications-api.js';
+import { notificationApi, subscribeToNotifications } from './pages/notifications-api.js';
 import { getAccessibilityMap } from './pages/accessibility-map-api.js';
 import { renderEventEditor, renderEventList } from './pages/event-management.js';
 import { renderEventApplicants } from './pages/event-applicants.js';
@@ -573,6 +573,7 @@ settingsPanel.addEventListener('click', async event => {
   event.preventDefault();
   try {
     await signOut();
+    stopNotifications?.();
   } catch (error) {
     console.warn('서버 로그아웃 요청 실패:', error.message);
   }
@@ -623,6 +624,7 @@ function showSupportError(error) {
   byId('support-error').textContent = error.message;
 }
 let loadedMemberId;
+let stopNotifications;
 function showNotificationError(error) {
   byId('notification-error').textContent = error.message;
 }
@@ -633,7 +635,11 @@ function loadAccountData() {
   if (apiEnabled) {
     accountRequests.push(loadEvents().catch(error => { events = []; eventLoadError = error.message; }));
     applicationLoadError = '';
-    accountRequests.push(loadNotifications().catch(showNotificationError));
+    stopNotifications?.();
+    const memberId = loadedMemberId;
+    stopNotifications = subscribeToNotifications(() => {
+      if (getSession()?.memberId === memberId) loadNotifications().catch(showNotificationError);
+    });
     accountRequests.push(getAccessibilityMap().then(data => { accessibilityMap = data; }).catch(error => { accessibilityMap = { error: error.message }; }));
     accountRequests.push(getApplications().catch(showApplicationError).then(items => { applications = items; }));
   }
