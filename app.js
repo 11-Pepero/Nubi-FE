@@ -1,3 +1,4 @@
+import { getEvents, saveEvent, getEventApplicants, getEventApplicant, saveEventApplicant } from './pages/events-api.js';
 import { notificationApi } from './pages/notifications-api.js';
 import { getAccessibilityMap } from './pages/accessibility-map-api.js';
 import { renderEventEditor, renderEventList } from './pages/event-management.js';
@@ -44,6 +45,12 @@ const pageTitles = {
 let programs = [];
 let applications = [];
 let events = [];
+let eventLoadError = '';
+
+async function loadEvents() {
+  events = await (apiEnabled ? getEvents() : mockActivity.getEvents());
+  eventLoadError = '';
+}
 let eventEditorOptions;
 let accessibilityMap;
 let notifications = [];
@@ -53,13 +60,16 @@ let notificationTotalPages = 0;
 let notificationBusy = false;
 
 async function loadActivity() {
-  [programs, applications, events, eventEditorOptions] = await Promise.all([
+  [programs, applications, eventEditorOptions] = await Promise.all([
     getPrograms().catch(error => {
       programLoadError = error.message;
       return [];
-    }), getApplications().catch(showApplicationError), mockActivity.getEvents(), mockActivity.getEventEditorOptions(),
+    }), getApplications().catch(showApplicationError), mockActivity.getEventEditorOptions(),
   ]);
-  if (!apiEnabled) accessibilityMap = await mockActivity.getAccessibilityMap();
+  if (!apiEnabled) {
+    await loadEvents();
+    accessibilityMap = await mockActivity.getAccessibilityMap();
+  }
 }
 
 let applicationProfile = {};
@@ -185,7 +195,7 @@ function hasProgramApplication(programId, groupId = null) {
   );
 }
 
-function renderPage(focus = true) {
+async function renderPage(focus = true) {
   const [route, id, group] = location.hash.slice(1).split('/');
   const loginPage = byId('login-page');
   loginPage.hidden = !isAccountRoute(route);
@@ -323,30 +333,45 @@ function renderPage(focus = true) {
       markReceived: update(markApplicationReceived),
     });
   } else if (page === 'events') {
-    const event = events.find(item => String(item.eventId) === id);
+    const route = location.hash;
+    let event = events.find(item => String(item.eventId) === id);
+    if (apiEnabled && (eventLoadError || (event && group === 'applications'))) {
+      try {
+        if (eventLoadError) throw new Error(eventLoadError);
+        event = { ...event, applicants: await getEventApplicants(event.eventId) };
+      } catch (error) {
+        if (location.hash === route) otherContent.textContent = error.message;
+        return;
+      }
+      if (location.hash !== route) return;
+    }
     if (event && ['applications', 'reviews'].includes(group) && event.status !== 'DRAFT') {
       byId('other-title').hidden = true;
       byId('other-page').setAttribute('aria-labelledby', 'event-applicant-title');
       renderEventApplicants(otherContent, {
         event, escapeText, initialSection: group,
         saveReviewReply: async (index, reply) => {
+          if (apiEnabled) throw new Error('후기 답글 API 연결이 필요해요.');
           const reviews = await mockActivity.saveEventReviewReply(event.eventId, index, reply);
           events = await mockActivity.getEvents();
           return reviews;
         },
         savePreparationTask: async (taskId, ready) => {
+          if (apiEnabled) throw new Error('행사 지원 준비 항목 API 연결이 필요해요.');
           const tasks = await mockActivity.saveEventPreparationTask(event.eventId, taskId, ready);
           events = await mockActivity.getEvents();
           return tasks;
         },
+        loadApplicant: apiEnabled ? index => getEventApplicant(event.eventId, event.applicants[index].applicationId) : null,
         saveApplicant: async (index, changes) => {
+          if (apiEnabled) return saveEventApplicant(event.eventId, event.applicants[index], changes);
           const applicant = await mockActivity.saveEventApplicant(event.eventId, index, changes);
           events = await mockActivity.getEvents();
           return applicant;
         },
         closeApplications: async () => {
-          await mockActivity.saveEvent(event.eventId, { applicationsClosed: true });
-          events = await mockActivity.getEvents();
+          await (apiEnabled ? saveEvent : mockActivity.saveEvent)(event.eventId, { applicationsClosed: true });
+          await loadEvents();
         },
       });
       if (focus) byId('event-applicant-title').focus();
@@ -366,8 +391,8 @@ function renderPage(focus = true) {
       renderEventEditor(otherContent, {
         event, options: eventEditorOptions, initialPlace, escapeText,
         save: async values => {
-          await mockActivity.saveEvent(event?.eventId ?? null, values);
-          events = await mockActivity.getEvents();
+          await (apiEnabled ? saveEvent : mockActivity.saveEvent)(event?.eventId ?? null, values);
+          await loadEvents();
           if (location.hash === eventHash) location.hash = values.status === 'DRAFT' ? 'events/list/drafts' : 'events';
         },
       });
@@ -570,6 +595,7 @@ function loadAccountData() {
   byId('support-error').textContent = '';
   const accountRequests = [loadSupport().catch(showSupportError), loadProfile().catch(showProfileError)];
   if (apiEnabled) {
+    accountRequests.push(loadEvents().catch(error => { events = []; eventLoadError = error.message; }));
     applicationLoadError = '';
     accountRequests.push(loadNotifications().catch(showNotificationError));
     accountRequests.push(getAccessibilityMap().then(data => { accessibilityMap = data; }).catch(error => { accessibilityMap = { error: error.message }; }));

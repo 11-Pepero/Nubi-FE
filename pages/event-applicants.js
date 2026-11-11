@@ -16,7 +16,7 @@ function appliedDate(value) {
   return dateFormat.format(date);
 }
 
-export function renderEventApplicants(container, { event, escapeText, closeApplications, saveApplicant, savePreparationTask, saveReviewReply, initialSection }) {
+export function renderEventApplicants(container, { event, escapeText, closeApplications, loadApplicant, saveApplicant, savePreparationTask, saveReviewReply, initialSection }) {
   const entries = event.applicants ?? [];
   const sum = key => entries.reduce((total, entry) => total + count(entry[key]), 0);
   const users = sum('participantCount');
@@ -102,6 +102,18 @@ export function renderEventApplicants(container, { event, escapeText, closeAppli
       openReviewPhotos?.();
     } else if (button.hasAttribute('data-applicant-index')) {
       const index = Number(button.dataset.applicantIndex);
+      if (loadApplicant) {
+        button.disabled = true;
+        try {
+          entries[index] = await loadApplicant(index);
+          if (!page.isConnected) return;
+        } catch (error) {
+          feedback.textContent = error.message;
+          return;
+        } finally {
+          button.disabled = false;
+        }
+      }
       openApplicantDrawer(drawer, entries[index], escapeText, async changes => {
         entries[index] = await saveApplicant(index, changes);
         if (changes.status) update();
