@@ -5,6 +5,7 @@ import { renderApplicationReview } from './pages/application-review.js';
 import { renderAccessibilityMap } from './pages/accessibility-map.js';
 import { renderProgramDiscovery } from './pages/program-discovery.js';
 import { mountLanding } from './pages/landing.js';
+import { renderProgramDemo } from './pages/program-demo.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -158,6 +159,19 @@ function hasProgramApplication(programId, groupId = null) {
 
 function renderPage(focus = true) {
   const [route, id, group] = location.hash.slice(1).split('/');
+  const isDemo = route === 'landing-demo';
+  const demoPage = byId('program-demo-page');
+  demoPage.hidden = !isDemo;
+  if (isDemo) {
+    landingPage.hidden = true;
+    byId('dashboard-sidebar').hidden = true;
+    byId('dashboard-main').hidden = true;
+    for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
+    document.title = '프로그램 탐색 체험 | Nubi';
+    renderProgramDemo(demoPage);
+    window.scrollTo(0, 0);
+    return;
+  }
   const isLanding = isLandingRoute(route);
   const wasLanding = !landingPage.hidden;
   landingPage.hidden = !isLanding;

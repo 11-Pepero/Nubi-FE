@@ -30,7 +30,10 @@ export function mountLanding(container) {
   container.innerHTML = `
     <div class="landing-top">
       <header class="landing-header">
-        <a class="landing-brand" href="#landing">함께가요 용인</a>
+        <a class="landing-brand" href="#landing" aria-label="Nubi 홈">
+          <span class="landing-brand-mark" aria-hidden="true"><img src="./nubi-logo.png" alt="" width="46" height="46"></span>
+          <span class="landing-brand-text"><strong>Nubi:</strong> <span>다양한 복지 기회를 누비다</span></span>
+        </a>
         <nav class="landing-nav" aria-label="랜딩 메뉴">
           <a href="#landing-about">서비스 소개</a>
           <a href="#landing-steps">이용 방법</a>
@@ -46,7 +49,7 @@ export function mountLanding(container) {
           <p class="landing-intro">기관이 이용자 지원 정보를 한 번 등록하면, 참여할 수 있는 프로그램만 골라 보여주고<br>신청서와 문의문까지 준비해 드려요.</p>
           <div class="landing-actions">
             <button type="button" class="landing-button" data-landing-access>우리 기관 시작하기</button>
-            <a class="landing-button landing-outline" href="#programs">프로그램 둘러보기</a>
+            <a class="landing-button landing-outline" href="#landing-demo">프로그램 둘러보기</a>
           </div>
         </div>
       </section>
