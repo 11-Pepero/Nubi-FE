@@ -24,9 +24,10 @@
   <div id="landing-page" hidden></div>
   <div id="login-page" hidden></div>
   <div id="program-demo-page" hidden></div>
+  <button type="button" class="icon-button" id="toggle-menu" aria-label="메뉴 접기" aria-controls="dashboard-sidebar" aria-expanded="true"><svg aria-hidden="true"><use href="#panel"/></svg></button>
+  <div class="sidebar-frame">
   <aside class="sidebar" id="dashboard-sidebar" aria-label="서비스 메뉴">
     <div class="brand">
-      <button class="icon-button" id="toggle-menu" aria-label="메뉴 접기" aria-controls="sidebar-content" aria-expanded="true"><svg aria-hidden="true"><use href="#panel"/></svg></button>
       <div class="brand-identity">
         <span class="brand-mark" aria-hidden="true"><img src="./nubi-logo.png" alt="" width="34" height="34"></span>
         <strong>Nubi</strong>
@@ -58,6 +59,7 @@
       </div>
     </div>
   </aside>
+  </div>
   <dialog id="withdrawal-dialog" class="withdrawal-dialog" aria-labelledby="withdrawal-title">
     <h2 id="withdrawal-title" aria-live="polite">정말로 탈퇴할까요?</h2>
     <form method="dialog">

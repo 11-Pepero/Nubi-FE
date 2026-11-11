@@ -51,7 +51,7 @@ export function renderReceivedReviews(container, { event, escapeText, saveReply 
           <div class="event-applicant-filters event-review-filters" role="group" aria-label="후기 정렬">${modes.map(([key, label]) => `<button type="button" data-review-mode="${key}" aria-pressed="${mode === key}">${label}</button>`).join('')}</div>
           <div class="event-review-list">${visible.map(({ review, index }) => {
             const stars = Math.max(0, Math.min(5, Math.round(Number(review.rating) || 0)));
-            return `<article class="event-panel event-review-card">
+            return `<article class="event-panel event-review-card" data-review-id="${escapeText(review.reviewId)}" tabindex="-1">
               <header><strong>${escapeText(review.organization)}</strong>${stars ? `<span class="event-review-stars" aria-label="별점 ${stars}점">${'★'.repeat(stars)}<span>${'☆'.repeat(5 - stars)}</span></span>` : ''}<small>${date(review.createdAt)}</small></header>
               <p class="event-muted">${escapeText([review.participantCount != null && `이용자 ${review.participantCount}명`, review.companionCount != null && `동반 ${review.companionCount}명`].filter(Boolean).join(', '))}</p>
               <p>${escapeText(review.comment)}</p>
