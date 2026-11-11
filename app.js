@@ -4,6 +4,8 @@ import { renderApplicationStatus } from './pages/application-status.js';
 import { renderApplicationReview } from './pages/application-review.js';
 import { renderAccessibilityMap } from './pages/accessibility-map.js';
 import { renderProgramDiscovery } from './pages/program-discovery.js';
+import { mountLanding } from './pages/landing.js';
+import { renderProgramDemo } from './pages/program-demo.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -11,6 +13,9 @@ import { renderApplicationPreparation } from './pages/application-preparation.js
 import { programDeadline, programSchedule } from './program-format.js';
 
 const byId = id => document.getElementById(id);
+const landingPage = byId('landing-page');
+mountLanding(landingPage);
+const isLandingRoute = route => !route || route === 'landing' || route.startsWith('landing-');
 
 function escapeText(value) {
   const element = document.createElement('span');
@@ -154,6 +159,34 @@ function hasProgramApplication(programId, groupId = null) {
 
 function renderPage(focus = true) {
   const [route, id, group] = location.hash.slice(1).split('/');
+  const isDemo = route === 'landing-demo';
+  const demoPage = byId('program-demo-page');
+  demoPage.hidden = !isDemo;
+  if (isDemo) {
+    landingPage.hidden = true;
+    byId('dashboard-sidebar').hidden = true;
+    byId('dashboard-main').hidden = true;
+    for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
+    document.title = '프로그램 탐색 체험 | Nubi';
+    renderProgramDemo(demoPage);
+    window.scrollTo(0, 0);
+    return;
+  }
+  const isLanding = isLandingRoute(route);
+  const wasLanding = !landingPage.hidden;
+  landingPage.hidden = !isLanding;
+  byId('dashboard-sidebar').hidden = isLanding;
+  byId('dashboard-main').hidden = isLanding;
+  if (isLanding) {
+    document.title = 'Nubi | 다양한 복지 기회를 누비다';
+    for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
+    document.querySelector('#notification-panel:popover-open')?.hidePopover();
+    const target = byId(route);
+    if (target && landingPage.contains(target)) target.scrollIntoView();
+    else window.scrollTo(0, 0);
+    return;
+  }
+  if (wasLanding) window.scrollTo(0, 0);
   const groupAnchor = /^group-\d+$/.test(route);
   const page = Object.hasOwn(pageTitles, route) ? route : 'support';
   byId('support-page').hidden = page !== 'support';
@@ -389,9 +422,12 @@ byId('toggle-theme').addEventListener('click', event => {
   event.currentTarget.setAttribute('aria-pressed', String(dark));
 });
 window.addEventListener('hashchange', () => renderPage());
+if (isLandingRoute(location.hash.slice(1))) renderPage(false);
 
 const profileReady = loadProfile().catch(() => {
   byId('profile-organization').textContent = '기관 정보를 불러오지 못했어요';
 });
-Promise.all([loadSupport(), loadActivity(), profileReady]).then(() => renderPage(Boolean(location.hash)));
+Promise.all([loadSupport(), loadActivity(), profileReady]).then(() => {
+  if (!isLandingRoute(location.hash.slice(1))) renderPage();
+});
 loadNotifications().catch(error => { byId('notification-error').textContent = error.message; });
