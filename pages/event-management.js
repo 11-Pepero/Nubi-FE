@@ -60,9 +60,9 @@ function eventRow(item, tab, escapeText) {
   const count = Math.max(0, Number(item.participantCount) || 0);
   const capacity = Number(item.capacity);
   const deadline = programDeadline({ applyUntil: item.startAt }).label;
-  const photo = item.photos?.[0];
+  const photo = item.thumbnailUrl ?? item.photos?.[0];
   return `<article class="event-row">
-    <div class="event-row-photo">${typeof photo === 'string' && /^data:image\/(jpeg|png|webp|heic|heif);base64,[a-z0-9+/=]+$/i.test(photo) ? `<img src="${escapeText(photo)}" alt="">` : eventPlaceholder}</div>
+    <div class="event-row-photo">${typeof photo === 'string' && isEventPhoto(photo) ? `<img src="${escapeText(photo)}" alt="">` : eventPlaceholder}</div>
     <div class="event-row-main"><div><h2>${escapeText(item.title || '제목 없는 행사')}</h2><span class="event-row-badge" data-status="${tab}">${tab === 'active' ? '공개 중' : tab === 'past' ? '종료' : '임시 저장'}</span>${tab === 'active' && item.startAt ? `<span class="event-muted">${deadline}</span>` : ''}</div>
       <p class="event-muted">${escapeText(eventDate(item))} · ${escapeText(item.venue?.name || '장소 미정')}</p>
       ${tab === 'active' && capacity > 0 ? `<div class="event-progress"><progress value="${count}" max="${capacity}" aria-label="정원 대비 참여 인원"></progress><span>${count} / ${capacity}명</span></div>` : ''}
@@ -79,9 +79,13 @@ function eventRow(item, tab, escapeText) {
   </article>`;
 }
 
-export function renderEventEditor(container, { event, options, initialPlace, escapeText, save }) {
+function isEventPhoto(url) {
+  return /^(https?:\/\/|\/(?!\/)|data:image\/(?:jpeg|png|webp|heic|heif);base64,)/i.test(url);
+}
+
+export function renderEventEditor(container, { event, options, initialPlace, escapeText, save, generatePromotion, downloadPoster }) {
   const existingPhotos = event?.photos ?? [];
-  const photos = existingPhotos.filter(url => typeof url === 'string' && /^data:image\/(jpeg|png|webp|heic|heif);base64,[a-z0-9+/=]+$/i.test(url));
+  const photos = existingPhotos.filter(url => typeof url === 'string' && isEventPhoto(url));
   const features = options?.features ?? [];
   const selectedFeatures = event?.accessibilityTags ?? [];
   const time = value => value?.slice(11, 16) ?? '';
@@ -240,7 +244,22 @@ export function renderEventEditor(container, { event, options, initialPlace, esc
     const button = e.target.closest('[data-tone]');
     if (button) selectTone(button.dataset.tone);
   });
-  form.querySelector('[data-regenerate]').addEventListener('click', () => {
+  form.querySelector('[data-regenerate]').addEventListener('click', async event => {
+    if (generatePromotion) {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await generatePromotion();
+        Object.assign(promotions, { standard: result.general, easy: result.easy, message: result.sms });
+        updatePreview();
+        promotionStatus.textContent = '저장된 행사 정보로 홍보문을 작성했어요.';
+      } catch (error) {
+        promotionStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+      return;
+    }
     delete promotions[tone];
     updatePreview();
     promotionStatus.textContent = '현재 행사 정보로 홍보문을 다시 작성했어요.';
@@ -254,7 +273,24 @@ export function renderEventEditor(container, { event, options, initialPlace, esc
       promotionStatus.textContent = '선택한 홍보문을 복사해 주세요.';
     }
   });
-  form.querySelector('[data-poster]').addEventListener('click', () => {
+  form.querySelector('[data-poster]').addEventListener('click', async event => {
+    if (downloadPoster) {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const url = URL.createObjectURL(await downloadPoster(promotions.easy));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = '행사-포스터.pdf';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        promotionStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+      return;
+    }
     const poster = form.querySelector('.event-poster');
     poster.innerHTML = `<h1>${escapeText(elements.title.value || '행사 안내')}</h1>${photos.length ? `<img src="${escapeText(photos[0])}" alt="">` : ''}<p>${escapeText(promotion.value)}</p>`;
     window.print();
@@ -270,12 +306,13 @@ export function renderEventEditor(container, { event, options, initialPlace, esc
     setBusy(true);
     feedback.textContent = '';
     try {
-      photos.push(...await Promise.all(files.map(file => new Promise((resolve, reject) => {
+      const previews = await Promise.all(files.map(file => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(file);
-      }))));
+      })));
+      photos.push(...[...new Set(previews)].filter(url => !photos.includes(url)));
       renderPhotos();
     } catch {
       feedback.textContent = '사진을 읽지 못했어요.';

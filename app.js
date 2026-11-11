@@ -1,3 +1,7 @@
+import { createReviewPublisher, getReviewDraft, saveReviewDraft } from './pages/application-reviews-api.js';
+import { getEvents, saveEvent, getEventApplicants, getEventApplicant, saveEventApplicant, getEventNeeds, saveEventNeed, getEventReviews, postEventReviewReply, getEventEditorData, saveEventPhotos } from './pages/events-api.js';
+import { notificationApi, subscribeToNotifications } from './pages/notifications-api.js';
+import { getAccessibilityMap } from './pages/accessibility-map-api.js';
 import { renderEventEditor, renderEventList } from './pages/event-management.js';
 import { renderEventApplicants } from './pages/event-applicants.js';
 import { renderApplicationStatus } from './pages/application-status.js';
@@ -8,6 +12,10 @@ import { mountLanding } from './pages/landing.js';
 import { renderProgramDemo } from './pages/program-demo.js';
 import { renderLogin, renderPasswordReset } from './pages/login.js';
 import { renderSignup } from './pages/signup.js';
+import { apiEnabled, apiRequest, getSession } from './pages/api-client.js';
+import { signIn, signOut, signUp } from './pages/auth-api.js';
+import { getProgram, getPrograms } from './pages/programs-api.js';
+import { getApplications, markApplicationReceived, cancelApplication } from './pages/applications-api.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -38,6 +46,12 @@ const pageTitles = {
 let programs = [];
 let applications = [];
 let events = [];
+let eventLoadError = '';
+
+async function loadEvents() {
+  events = await (apiEnabled ? getEvents() : mockActivity.getEvents());
+  eventLoadError = '';
+}
 let eventEditorOptions;
 let accessibilityMap;
 let notifications = [];
@@ -47,15 +61,37 @@ let notificationTotalPages = 0;
 let notificationBusy = false;
 
 async function loadActivity() {
-  [programs, applications, events, accessibilityMap, eventEditorOptions] = await Promise.all([
-    mockActivity.getPrograms(), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getAccessibilityMap(), mockActivity.getEventEditorOptions(),
+  [programs, applications, eventEditorOptions] = await Promise.all([
+    getPrograms().catch(error => {
+      programLoadError = error.message;
+      return [];
+    }), getApplications().catch(showApplicationError), mockActivity.getEventEditorOptions(),
   ]);
+  if (!apiEnabled) {
+    await loadEvents();
+    accessibilityMap = await mockActivity.getAccessibilityMap();
+  }
 }
 
 let applicationProfile = {};
+let programLoadError = '';
+let applicationLoadError = '';
+
+function showApplicationError(error) {
+  applicationLoadError = error.message;
+  return [];
+}
 
 async function loadProfile() {
-  const { organizationName, memberName } = (await mockActivity.getProfile()) ?? {};
+  let profile;
+  if (apiEnabled) {
+    if (!getSession()) return;
+    const organization = await apiRequest('/organizations/me');
+    profile = { organizationName: organization.name, memberName: organization.member?.name || organization.member?.email };
+  } else {
+    profile = await mockActivity.getProfile();
+  }
+  const { organizationName, memberName } = profile ?? {};
   const name = organizationName?.trim();
   const member = memberName?.trim();
   applicationProfile = { name, member };
@@ -66,7 +102,7 @@ async function loadProfile() {
 
 async function loadNotifications(page = 0) {
   const [result, count] = await Promise.all([
-    mockActivity.getNotifications({ page }), mockActivity.getUnreadCount(),
+    notificationApi.getNotifications({ page }), notificationApi.getUnreadCount(),
   ]);
   notifications = page ? [...notifications, ...result.content] : result.content;
   unreadCount = count.unreadCount;
@@ -160,7 +196,7 @@ function hasProgramApplication(programId, groupId = null) {
   );
 }
 
-function renderPage(focus = true) {
+async function renderPage(focus = true) {
   const [route, id, group] = location.hash.slice(1).split('/');
   const loginPage = byId('login-page');
   loginPage.hidden = !isAccountRoute(route);
@@ -172,9 +208,9 @@ function renderPage(focus = true) {
     for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
     document.querySelector('#notification-panel:popover-open')?.hidePopover();
     document.title = `${route === 'signup' ? '기관 가입' : id === 'reset' ? '비밀번호 찾기' : '로그인'} | Nubi`;
-    if (route === 'signup') renderSignup(loginPage);
-    else if (id === 'reset') renderPasswordReset(loginPage);
-    else renderLogin(loginPage);
+    if (route === 'signup') renderSignup(loginPage, { register: apiEnabled ? signUp : undefined });
+    else if (id === 'reset') renderPasswordReset(loginPage, { apiEnabled });
+    else renderLogin(loginPage, { authenticate: apiEnabled ? signIn : undefined });
     window.scrollTo(0, 0);
     return;
   }
@@ -205,6 +241,15 @@ function renderPage(focus = true) {
     else window.scrollTo(0, 0);
     return;
   }
+  if (apiEnabled && !getSession()) {
+    byId('dashboard-sidebar').hidden = true;
+    byId('dashboard-main').hidden = true;
+    location.replace('#login');
+    return;
+  }
+  if (apiEnabled && loadedMemberId !== getSession()?.memberId) {
+    loadAccountData().then(() => { if (!isPublicRoute()) renderPage(false); });
+  }
   if (wasLanding) window.scrollTo(0, 0);
   const groupAnchor = /^group-\d+$/.test(route);
   const page = Object.hasOwn(pageTitles, route) ? route : 'support';
@@ -232,14 +277,24 @@ function renderPage(focus = true) {
   if (page === 'eligible') {
     renderEligiblePage(otherContent, Number(id), { groups, care, hasProgramApplication, escapeText, dateLabel, venueLabel });
   } else if (page === 'programs') {
+    if (programLoadError) {
+      otherContent.innerHTML = '<p class="empty" role="alert"></p>';
+      otherContent.firstElementChild.textContent = programLoadError;
+      return;
+    }
     renderProgramDiscovery(otherContent, { programs, escapeText, hasProgramApplication, programDeadline, programSchedule });
     if (id) openProgram(Number(id), location.hash);
   } else if (page === 'prepare') {
     renderApplicationPreparation(otherContent, Number(id), Number(group), {
       programs, groups, care, applicationProfile, escapeText, venueLabel, groupOptions,
-      refreshApplications: async () => { applications = await mockActivity.getApplications(); },
+      refreshApplications: async () => { applications = await getApplications(); },
     });
   } else if (page === 'applications') {
+    if (applicationLoadError) {
+      otherContent.innerHTML = '<p class="empty" role="alert"></p>';
+      otherContent.firstElementChild.textContent = applicationLoadError;
+      return;
+    }
     if (id === 'review') {
       const item = applications.find(entry => String(entry.applicationId) === group && entry.status === 'ATTENDED');
       if (!item) {
@@ -251,18 +306,19 @@ function renderPage(focus = true) {
       byId('other-title').hidden = true;
       byId('other-page').setAttribute('aria-labelledby', 'review-title');
       document.title = '후기 남기기 | Nubi';
+      const publishReview = createReviewPublisher(item);
       renderApplicationReview(otherContent, {
-        item,
+        item: { ...item, reviewDraft: apiEnabled ? getReviewDraft(item.applicationId) : item.reviewDraft },
         program: programs.find(program => program.programId === item.programId),
         organization: applicationProfile.name,
         escapeText,
         saveDraft: async review => {
-          await mockActivity.saveApplicationReviewDraft(item.applicationId, review);
-          applications = await mockActivity.getApplications();
+          await saveReviewDraft(item.applicationId, review);
+          if (!apiEnabled) applications = await getApplications();
         },
         publish: async review => {
-          await mockActivity.saveApplicationReview(item.applicationId, review);
-          applications = await mockActivity.getApplications();
+          await publishReview(review);
+          applications = await getApplications();
           if (location.hash === reviewHash) location.hash = `applications/${encodeURIComponent(item.applicationId)}`;
         },
       });
@@ -271,38 +327,69 @@ function renderPage(focus = true) {
     }
     const update = operation => async (...args) => {
       await operation(...args);
-      applications = await mockActivity.getApplications();
+      applications = await getApplications();
       if (location.hash.slice(1).split('/')[0] === 'applications') renderPage(false);
     };
     renderApplicationStatus(otherContent, {
       applications, programs, escapeText,
-      markReceived: update(mockActivity.markApplicationReceived),
+      markReceived: update(markApplicationReceived),
+      cancel: update(cancelApplication),
     });
   } else if (page === 'events') {
-    const event = events.find(item => String(item.eventId) === id);
+    const route = location.hash;
+    let event = events.find(item => String(item.eventId) === id);
+    if (apiEnabled && (eventLoadError || (event && ['applications', 'reviews'].includes(group)))) {
+      try {
+        if (eventLoadError) throw new Error(eventLoadError);
+        const [applicants, needs, reviews] = await Promise.all([
+          getEventApplicants(event.eventId), getEventNeeds(event.eventId),
+          getEventReviews(event.eventId).catch(error => ({ reviewError: error.message })),
+        ]);
+        event = { ...event, applicants, ...needs, ...reviews };
+      } catch (error) {
+        if (location.hash === route) otherContent.textContent = error.message;
+        return;
+      }
+      if (location.hash !== route) return;
+    }
     if (event && ['applications', 'reviews'].includes(group) && event.status !== 'DRAFT') {
       byId('other-title').hidden = true;
       byId('other-page').setAttribute('aria-labelledby', 'event-applicant-title');
       renderEventApplicants(otherContent, {
         event, escapeText, initialSection: group,
         saveReviewReply: async (index, reply) => {
+          if (apiEnabled) {
+            const review = event.reviews[index];
+            const response = await postEventReviewReply(review.reviewId, reply);
+            review.reply = response.content;
+            event.reviewStats.awaitingReplyCount = Math.max(0, event.reviewStats.awaitingReplyCount - 1);
+            return event.reviews;
+          }
           const reviews = await mockActivity.saveEventReviewReply(event.eventId, index, reply);
           events = await mockActivity.getEvents();
           return reviews;
         },
         savePreparationTask: async (taskId, ready) => {
+          if (apiEnabled) {
+            const task = event.preparationTasks.find(item => String(item.id) === taskId);
+            const needs = await saveEventNeed(event.eventId, task, ready);
+            Object.assign(event, needs);
+            return needs.preparationTasks;
+          }
           const tasks = await mockActivity.saveEventPreparationTask(event.eventId, taskId, ready);
           events = await mockActivity.getEvents();
           return tasks;
         },
+        loadApplicant: apiEnabled ? index => getEventApplicant(event.eventId, event.applicants[index].applicationId) : null,
         saveApplicant: async (index, changes) => {
+          if (apiEnabled) return saveEventApplicant(event.eventId, event.applicants[index], changes);
           const applicant = await mockActivity.saveEventApplicant(event.eventId, index, changes);
           events = await mockActivity.getEvents();
           return applicant;
         },
         closeApplications: async () => {
-          await mockActivity.saveEvent(event.eventId, { applicationsClosed: true });
-          events = await mockActivity.getEvents();
+          await (apiEnabled ? saveEvent : mockActivity.saveEvent)(event.eventId, { applicationsClosed: true });
+          await loadEvents();
         },
       });
       if (focus) byId('event-applicant-title').focus();
@@ -316,14 +403,41 @@ function renderPage(focus = true) {
       return;
     } else {
       const eventHash = location.hash;
+      let eventId = event?.eventId;
+      let savedImages = new Map();
+      if (apiEnabled && event) {
+        try {
+          const detail = await getEventEditorData(eventId);
+          savedImages = new Map(detail.images.map(image => [image.url, image.imageId]));
+          event = { ...event, ...detail, status: event.status, notes: detail.description, photos: [...savedImages.keys()] };
+        } catch (error) {
+          if (location.hash === eventHash) otherContent.textContent = error.message;
+          return;
+        }
+        if (location.hash !== eventHash) return;
+      }
       const initialPlace = accessibilityMap?.districts.find(district => district.id === group)?.name;
       byId('other-title').hidden = true;
       byId('other-page').setAttribute('aria-labelledby', 'event-title');
       renderEventEditor(otherContent, {
         event, options: eventEditorOptions, initialPlace, escapeText,
+        generatePromotion: apiEnabled ? () => {
+          if (!eventId) throw new Error('행사를 먼저 임시 저장해 주세요.');
+          return apiRequest(`/events/${eventId}/promotions`, { method: 'POST' });
+        } : undefined,
+        downloadPoster: apiEnabled ? easy => {
+          if (!eventId) throw new Error('행사를 먼저 임시 저장해 주세요.');
+          return apiRequest(`/events/${eventId}/promotions/poster`, { method: 'POST', body: { easy }, responseType: 'pdf' });
+        } : undefined,
         save: async values => {
-          await mockActivity.saveEvent(event?.eventId ?? null, values);
-          events = await mockActivity.getEvents();
+          if (apiEnabled) {
+            const saved = await saveEvent(eventId, values);
+            eventId = saved.programId;
+            await saveEventPhotos(eventId, values.photos, savedImages);
+          } else {
+            await mockActivity.saveEvent(eventId ?? null, values);
+          }
+          await loadEvents();
           if (location.hash === eventHash) location.hash = values.status === 'DRAFT' ? 'events/list/drafts' : 'events';
         },
       });
@@ -338,7 +452,13 @@ function renderPage(focus = true) {
 }
 
 async function openProgram(id, hash = location.hash) {
-  const item = await mockActivity.getProgram(id);
+  let item;
+  try {
+    item = await getProgram(id);
+  } catch (error) {
+    if (location.hash === hash) showDetails('프로그램을 불러오지 못했어요', `<p>${escapeText(error.message)}</p>`);
+    return;
+  }
   if (!item || location.hash !== hash) return;
   const canPrepare = !hash.startsWith('#prepare') &&
     !hasProgramApplication(item.programId) &&
@@ -380,7 +500,7 @@ notificationPanel.addEventListener('click', async event => {
   errorMessage.textContent = '';
   try {
     if (readAll) {
-      const result = await mockActivity.readAllNotifications();
+      const result = await notificationApi.readAllNotifications();
       unreadCount = result.unreadCount;
       notifications = notifications.map(item => ({ ...item, read: true }));
       renderNotifications();
@@ -403,10 +523,10 @@ notificationPanel.addEventListener('click', async event => {
       const id = Number(link.dataset.notification);
       const current = notifications.find(item => item.notificationId === id);
       if (!current) return;
-      const item = current.read ? current : await mockActivity.readNotification(id);
+      const item = current.read ? current : await notificationApi.readNotification(id);
       const target = notificationTarget(item);
       notifications = notifications.map(entry => entry.notificationId === id ? item : entry);
-      ({ unreadCount } = await mockActivity.getUnreadCount());
+      ({ unreadCount } = await notificationApi.getUnreadCount());
       renderNotifications();
       notificationPanel.hidePopover();
       if (location.hash === `#${target.page}`) renderPage();
@@ -455,8 +575,19 @@ settingsPanel.addEventListener('beforetoggle', event => {
     window.removeEventListener('scroll', positionSettingsPanel, true);
   }
 });
-settingsPanel.addEventListener('click', event => {
-  if (event.target.closest('a')) settingsPanel.hidePopover();
+settingsPanel.addEventListener('click', async event => {
+  if (!event.target.closest('a[href="#login"]')) return;
+  settingsPanel.hidePopover();
+  if (!apiEnabled) return;
+  event.preventDefault();
+  try {
+    await signOut();
+    stopNotifications?.();
+  } catch (error) {
+    console.warn('서버 로그아웃 요청 실패:', error.message);
+  }
+  applicationProfile = {};
+  location.replace('#login');
 });
 const withdrawalDialog = byId('withdrawal-dialog');
 const withdrawalActions = withdrawalDialog.querySelector('form');
@@ -468,6 +599,10 @@ byId('open-withdrawal').addEventListener('click', () => {
   withdrawalDialog.showModal();
 });
 byId('confirm-withdrawal').addEventListener('click', () => {
+  if (apiEnabled) {
+    byId('withdrawal-title').textContent = '계정 탈퇴를 아직 지원하지 않아요';
+    return;
+  }
   withdrawalActions.hidden = true;
   byId('withdrawal-title').textContent = '탈퇴되었습니다';
   const currentRoute = location.hash;
@@ -491,10 +626,36 @@ const isPublicRoute = () => {
 };
 if (isPublicRoute()) renderPage(false);
 
-const profileReady = loadProfile().catch(() => {
+function showProfileError() {
   byId('profile-organization').textContent = '기관 정보를 불러오지 못했어요';
-});
-Promise.all([loadSupport(), loadActivity(), profileReady]).then(() => {
+}
+function showSupportError(error) {
+  byId('support-error').textContent = error.message;
+}
+let loadedMemberId;
+let stopNotifications;
+function showNotificationError(error) {
+  byId('notification-error').textContent = error.message;
+}
+function loadAccountData() {
+  loadedMemberId = getSession()?.memberId;
+  byId('support-error').textContent = '';
+  const accountRequests = [loadSupport().catch(showSupportError), loadProfile().catch(showProfileError)];
+  if (apiEnabled) {
+    accountRequests.push(loadEvents().catch(error => { events = []; eventLoadError = error.message; }));
+    applicationLoadError = '';
+    stopNotifications?.();
+    const memberId = loadedMemberId;
+    stopNotifications = subscribeToNotifications(() => {
+      if (getSession()?.memberId === memberId) loadNotifications().catch(showNotificationError);
+    });
+    accountRequests.push(getAccessibilityMap().then(data => { accessibilityMap = data; }).catch(error => { accessibilityMap = { error: error.message }; }));
+    accountRequests.push(getApplications().catch(showApplicationError).then(items => { applications = items; }));
+  }
+  return Promise.all(accountRequests);
+}
+const accountReady = !apiEnabled || getSession() ? loadAccountData() : Promise.resolve();
+Promise.all([accountReady, loadActivity()]).then(() => {
   if (!isPublicRoute()) renderPage();
 });
-loadNotifications().catch(error => { byId('notification-error').textContent = error.message; });
+if (!apiEnabled) loadNotifications().catch(showNotificationError);

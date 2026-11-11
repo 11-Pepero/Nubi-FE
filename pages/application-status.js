@@ -9,7 +9,7 @@ const stages = [
 const steps = ['준비', '접수', '참여', '후기'];
 const methods = { PHONE: '전화 접수', ONLINE: '온라인 접수', PAPER: '서면 접수' };
 
-export function renderApplicationStatus(container, { applications, programs, escapeText, markReceived }) {
+export function renderApplicationStatus(container, { applications, programs, escapeText, markReceived, cancel }) {
   const rows = applications.map(item => ({
     item,
     program: programs.find(program => program.programId === item.programId),
@@ -43,15 +43,17 @@ export function renderApplicationStatus(container, { applications, programs, esc
     if (button) update(button.dataset.stage);
   });
   list.addEventListener('click', async event => {
-    const button = event.target.closest('button[data-action=receive]');
+    const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;
     const item = rows.find(({ item }) => String(item.applicationId) === button.closest('[data-application-id]').dataset.applicationId)?.item;
     if (!item) return;
+    const isCancel = button.dataset.action === 'cancel';
+    if (isCancel && !window.confirm('신청 준비를 취소할까요?')) return;
     const error = page.querySelector('.application-error');
     button.disabled = true;
     error.textContent = '';
     try {
-      await markReceived(item.applicationId);
+      await (isCancel ? cancel : markReceived)(item.applicationId);
     } catch (failure) {
       error.textContent = failure.message;
     } finally {
@@ -75,13 +77,13 @@ function applicationRow({ item, program, stage }, escapeText) {
     const url = item.applicationUrl ?? program?.applicationUrl ?? item.sourceUrl ?? program?.sourceUrl ?? '';
     const hasOnlineLink = method === 'ONLINE' && /^https?:\/\//i.test(url);
     const label = method === 'ONLINE' ? '접수 링크 열기' : '신청서 이어 쓰기';
-    action = `<a class="pill" href="${hasOnlineLink ? escapeText(url) : prepare}"${hasOnlineLink ? ' target="_blank" rel="noopener"' : ''}>${label}</a>`;
+    action = `<a class="pill" href="${hasOnlineLink ? escapeText(url) : prepare}"${hasOnlineLink ? ' target="_blank" rel="noopener"' : ''}>${label}</a> <button class="pill" type="button" data-action="cancel">준비 취소</button>`;
   } else if (item.status === 'SUBMITTED' && !direct) {
     action = '<button class="pill primary" type="button" data-action="receive">접수 완료 표시</button>';
   } else if (stage === 1 || stage === 2) {
     action = `<button class="pill" type="button" data-program="${escapeText(item.programId)}">참가 안내 보기</button>`;
   } else if (stage === 3) {
-    action = `<a class="pill" href="#applications/review/${encodeURIComponent(item.applicationId)}">${item.review ? '후기 수정' : '후기 남기기'}</a>`;
+    action = `<a class="pill" href="#applications/review/${encodeURIComponent(item.applicationId)}">${(item.reviewId ?? item.review) ? '후기 수정' : '후기 남기기'}</a>`;
   }
   return `<article class="application-row" id="application-${id}" data-application-id="${id}" tabindex="-1">
     <div><h2>${escapeText(item.programTitle ?? program?.title ?? '프로그램')}
@@ -91,7 +93,7 @@ function applicationRow({ item, program, stage }, escapeText) {
     <span class="application-method${direct ? ' direct' : ''}">${direct ? '바로 신청' : methods[method] ?? '접수 방법 미정'}</span>
     ${stage < 0 ? `<span class="application-inactive">${({ CANCELLED: '취소', REJECTED: '거절' })[item.status] ?? '상태 확인 필요'}</span>` :
       `<ol class="application-steps" aria-label="신청 진행 단계">${steps.map((step, index) =>
-        `<li class="${index < stage || (index === 3 && item.review) ? 'is-done' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}>${step}</li>`).join('')}</ol>`}
+        `<li class="${index < stage || (index === 3 && (item.reviewId ?? item.review)) ? 'is-done' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}>${step}</li>`).join('')}</ol>`}
     <div class="application-actions">${action}</div>
   </article>`;
 }

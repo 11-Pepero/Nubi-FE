@@ -1,3 +1,14 @@
+import { apiEnabled, apiRequest } from './api-client.js';
+
+const supportApi = apiEnabled ? {
+  getGroups: () => apiRequest('/groups'),
+  getCare: () => apiRequest('/care-persons'),
+  getTags: () => apiRequest('/support-tags'),
+  getSummary: () => apiRequest('/groups/summary'),
+  saveGroup: (id, body) => apiRequest(id == null ? '/groups' : `/groups/${id}`, { method: id == null ? 'POST' : 'PUT', body }),
+  addCare: body => apiRequest('/care-persons', { method: 'POST', body }),
+} : mockSupport;
+
 export let groups = [];
 export let care = [];
 let categories = [];
@@ -5,7 +16,7 @@ let summary;
 
 export async function loadSupport() {
   [groups, care, categories, summary] = await Promise.all([
-    mockSupport.getGroups(), mockSupport.getCare(), mockSupport.getTags(), mockSupport.getSummary(),
+    supportApi.getGroups(), supportApi.getCare(), supportApi.getTags(), supportApi.getSummary(),
   ]);
   byId('care-group-filter').innerHTML = `<option value="">그룹 전체</option>${groupOptions(careFilter)}`;
   const selectedCategory = byId('care-category-filter').value;
@@ -160,7 +171,7 @@ function editGroup(group) {
     if (supports.some(item => item.quantity > memberCount)) {
       throw new Error('필요 인원은 그룹 참여 인원을 넘을 수 없어요.');
     }
-    await mockSupport.saveGroup(group?.id ?? null, { name: data.get('name').trim(), memberCount, supports });
+    await supportApi.saveGroup(group?.id ?? null, { name: data.get('name').trim(), memberCount, supports });
     await loadSupport();
     showPanel(false);
   }, { groupEditor: true });
@@ -269,7 +280,7 @@ careForm.addEventListener('submit', async event => {
       const tag = tags.find(item => item.label === content);
       return { supportTagId: tag?.id ?? null, content: tag ? null : content || null };
     }).filter(item => item.supportTagId || item.content);
-    await mockSupport.addCare({
+    await supportApi.addCare({
       alias: data.get('alias').trim(),
       groupId: Number(data.get('groupId')) || null,
       memo: data.get('memo').trim() || null,

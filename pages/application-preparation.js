@@ -1,4 +1,5 @@
 import { programSchedule } from '../program-format.js';
+import { prepareApplication } from './applications-api.js';
 
 const byId = id => document.getElementById(id);
 
@@ -132,7 +133,7 @@ export function renderApplicationPreparation(otherContent, programId, groupId, {
     </form>`;
 
   const form = byId('application-form');
-  form.addEventListener('submit', event => submitApplication(event, refreshApplications));
+  form.addEventListener('submit', event => submitApplication(event, refreshApplications, program.applyMethod === 'DIRECT'));
   const methods = [...form.querySelectorAll('[data-method]')];
   const message = byId('prepare-message');
   const sms = byId('prepare-sms');
@@ -189,7 +190,7 @@ export function renderApplicationPreparation(otherContent, programId, groupId, {
   updateDraft();
 }
 
-async function submitApplication(event, refreshApplications) {
+async function submitApplication(event, refreshApplications, direct) {
   event.preventDefault();
   const form = event.target;
   const submit = form.querySelector('[type="submit"]');
@@ -199,14 +200,14 @@ async function submitApplication(event, refreshApplications) {
   errorMessage.textContent = '';
   submit.disabled = true;
   try {
-    await mockActivity.prepareApplication({
+    await prepareApplication({
       programId: Number(data.get('programId')),
       groupId: Number(data.get('groupId')),
       participantCount: data.get('participantCount') === '' ? null : Number(data.get('participantCount')),
       companionCount: Number(data.get('companionCount')),
       careIds: [],
       received: form.dataset.received === 'true',
-    });
+    }, direct);
     await refreshApplications();
     if (form.isConnected) location.hash = 'applications';
   } catch (error) {

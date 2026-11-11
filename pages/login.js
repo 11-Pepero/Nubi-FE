@@ -85,7 +85,7 @@ export function renderLogin(container, { authenticate } = {}) {
   }
 }
 
-export function renderPasswordReset(container) {
+export function renderPasswordReset(container, { apiEnabled = false } = {}) {
   const demoCode = '123456';
   container.innerHTML = `
     <header class="login-header"><a class="login-brand" href="#landing"><strong>Nubi</strong></a><a class="pill" href="#login">로그인으로 돌아가기</a></header>
@@ -109,6 +109,11 @@ export function renderPasswordReset(container) {
       </section>
     </main>`;
   const form = container.querySelector('form');
+  if (apiEnabled) {
+    form.hidden = true;
+    container.querySelector('.login-description').textContent = '비밀번호 재설정은 아직 이용할 수 없어요.';
+    return;
+  }
   const email = form.elements['reset-email'];
   const code = form.elements['reset-code'];
   const fields = form.querySelector('fieldset');

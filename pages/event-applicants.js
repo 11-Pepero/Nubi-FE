@@ -16,7 +16,7 @@ function appliedDate(value) {
   return dateFormat.format(date);
 }
 
-export function renderEventApplicants(container, { event, escapeText, closeApplications, saveApplicant, savePreparationTask, saveReviewReply, initialSection }) {
+export function renderEventApplicants(container, { event, escapeText, closeApplications, loadApplicant, saveApplicant, savePreparationTask, saveReviewReply, initialSection }) {
   const entries = event.applicants ?? [];
   const sum = key => entries.reduce((total, entry) => total + count(entry[key]), 0);
   const users = sum('participantCount');
@@ -58,7 +58,7 @@ export function renderEventApplicants(container, { event, escapeText, closeAppli
     const metrics = [['신청 인원', event.capacity ? `${users + companions} / ${count(event.capacity)}명` : `${users + companions}명`], ['이용자', `${users}명`], ['동반 인력', `${companions}명`], ['휠체어', `${sum('wheelchairCount')}명`], ['새 신청', `${entries.filter(entry => entry.status === 'NEW').length}건`]];
     const summary = `<div class="event-summary event-applicant-summary">${metrics.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join('')}</div>`;
     if (section === 'support') {
-      body.innerHTML = summary + renderSupportOverview(event.preparationTasks ?? [], entries, escapeText, savingTask);
+      body.innerHTML = summary + renderSupportOverview(event.preparationTasks ?? [], entries, escapeText, savingTask, event.supportOverview);
       return;
     }
     if (section === 'reviews') {
@@ -102,6 +102,18 @@ export function renderEventApplicants(container, { event, escapeText, closeAppli
       openReviewPhotos?.();
     } else if (button.hasAttribute('data-applicant-index')) {
       const index = Number(button.dataset.applicantIndex);
+      if (loadApplicant) {
+        button.disabled = true;
+        try {
+          entries[index] = await loadApplicant(index);
+          if (!page.isConnected) return;
+        } catch (error) {
+          feedback.textContent = error.message;
+          return;
+        } finally {
+          button.disabled = false;
+        }
+      }
       openApplicantDrawer(drawer, entries[index], escapeText, async changes => {
         entries[index] = await saveApplicant(index, changes);
         if (changes.status) update();
@@ -147,6 +159,7 @@ export function renderEventApplicants(container, { event, escapeText, closeAppli
     body.querySelectorAll('[data-preparation-task]').forEach(control => { control.disabled = true; });
     try {
       event.preparationTasks = await savePreparationTask(taskId, ready);
+      if (event.preparationError) feedback.textContent = event.preparationError;
     } catch (error) {
       feedback.textContent = error.message;
     } finally {
@@ -161,10 +174,10 @@ export function renderEventApplicants(container, { event, escapeText, closeAppli
   update();
 }
 
-function renderSupportOverview(tasks, entries, escapeText, saving) {
+function renderSupportOverview(tasks, entries, escapeText, saving, overview) {
   const ready = tasks.filter(task => task.ready).length;
-  const care = entries.flatMap(entry => (entry.individualCare ?? []).map(item => ({ ...item, organization: entry.organization })));
-  const arrivals = entries.filter(entry => entry.arrivalTime).sort((a, b) => a.arrivalTime.localeCompare(b.arrivalTime));
+  const care = overview?.cares ?? entries.flatMap(entry => (entry.individualCare ?? []).map(item => ({ ...item, organization: entry.organization })));
+  const arrivals = overview?.arrivals ?? entries.filter(entry => entry.arrivalTime).sort((a, b) => a.arrivalTime.localeCompare(b.arrivalTime));
   return `
     <div class="event-support-layout">
       <section class="event-support-tasks">
@@ -179,8 +192,8 @@ function renderSupportOverview(tasks, entries, escapeText, saving) {
         <section class="event-panel"><header><h2>개별 케어 모아보기</h2><span>${care.length}명</span></header>
           <ul class="event-support-care">${care.map(item => `<li><strong>${escapeText(item.name)}</strong> <small>${escapeText(item.organization)}</small><p>${escapeText([item.title, item.note].filter(Boolean).join(' · '))}</p></li>`).join('') || '<li class="empty">등록된 개별 케어 내용이 없어요.</li>'}</ul>
         </section>
-        <section class="event-panel"><h2>도착 순서</h2>
-          <ul class="event-support-arrivals">${arrivals.map(entry => `<li><strong>${escapeText(entry.arrivalTime)}</strong><span>${escapeText(entry.organization)}</span><small>${escapeText(entry.transport)}</small></li>`).join('') || '<li class="empty">등록된 도착 일정이 없어요.</li>'}</ul>
+        <section class="event-panel"><h2>${overview ? '오는 방법' : '도착 순서'}</h2>
+          <ul class="event-support-arrivals">${arrivals.map(entry => `<li><strong>${escapeText(entry.arrivalTime ?? (count(entry.participantCount) + count(entry.companionCount)) + '명')}</strong><span>${escapeText(entry.organization)}</span><small>${escapeText(entry.transport)}</small></li>`).join('') || '<li class="empty">등록된 도착 일정이 없어요.</li>'}</ul>
         </section>
       </div>
     </div>`;

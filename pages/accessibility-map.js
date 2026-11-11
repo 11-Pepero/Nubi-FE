@@ -7,6 +7,7 @@ export function renderAccessibilityMap(container, { data, escapeText }) {
   const districts = data?.districts ?? [];
   if (!districts.length) {
     container.innerHTML = '<p class="empty">표시할 지역 정보가 없어요.</p>';
+    if (data?.error) container.firstElementChild.textContent = data.error;
     return;
   }
   let selected = data.defaultDistrictId ?? districts[0].id;
@@ -18,6 +19,7 @@ export function renderAccessibilityMap(container, { data, escapeText }) {
 
   container.innerHTML = `
     <section class="access-map" aria-label="용인시 지역별 참여 기회">
+      ${data.schematic ? '<p class="page-meta">도식 지도 · 위치는 구 내 상대 위치를 보여줘요.</p>' : ''}
       <div class="access-map-layers" role="group" aria-label="지도 표시 항목">
         ${layers.map(([key, label]) => `<button type="button" data-layer="${key}" aria-pressed="${key === layer}">${label}</button>`).join('')}
       </div>
