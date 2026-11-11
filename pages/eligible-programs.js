@@ -1,4 +1,5 @@
 import { programDeadline, programSchedule } from '../program-format.js';
+import { getEligiblePrograms } from './programs-api.js';
 
 const byId = id => document.getElementById(id);
 
@@ -221,7 +222,7 @@ export function renderEligiblePage(otherContent, groupId, { groups, care, hasPro
     grid.innerHTML = '<p class="empty">프로그램을 불러오는 중이에요.</p>';
     updateResults();
     try {
-      const response = await mockActivity.getEligiblePrograms(group.id, { careIds });
+      const response = await getEligiblePrograms(group.id, { careIds });
       if (!grid.isConnected || currentRequest !== request) return;
       items = response.items;
       loading = false;

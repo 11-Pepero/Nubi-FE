@@ -10,6 +10,7 @@ import { renderLogin, renderPasswordReset } from './pages/login.js';
 import { renderSignup } from './pages/signup.js';
 import { apiEnabled, apiRequest, getSession } from './pages/api-client.js';
 import { signIn, signOut, signUp } from './pages/auth-api.js';
+import { getProgram, getPrograms } from './pages/programs-api.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -50,11 +51,15 @@ let notificationBusy = false;
 
 async function loadActivity() {
   [programs, applications, events, accessibilityMap, eventEditorOptions] = await Promise.all([
-    mockActivity.getPrograms(), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getAccessibilityMap(), mockActivity.getEventEditorOptions(),
+    getPrograms().catch(error => {
+      programLoadError = error.message;
+      return [];
+    }), mockActivity.getApplications(), mockActivity.getEvents(), mockActivity.getAccessibilityMap(), mockActivity.getEventEditorOptions(),
   ]);
 }
 
 let applicationProfile = {};
+let programLoadError = '';
 
 async function loadProfile() {
   let profile;
@@ -251,6 +256,11 @@ function renderPage(focus = true) {
   if (page === 'eligible') {
     renderEligiblePage(otherContent, Number(id), { groups, care, hasProgramApplication, escapeText, dateLabel, venueLabel });
   } else if (page === 'programs') {
+    if (programLoadError) {
+      otherContent.innerHTML = '<p class="empty" role="alert"></p>';
+      otherContent.firstElementChild.textContent = programLoadError;
+      return;
+    }
     renderProgramDiscovery(otherContent, { programs, escapeText, hasProgramApplication, programDeadline, programSchedule });
     if (id) openProgram(Number(id), location.hash);
   } else if (page === 'prepare') {
@@ -357,7 +367,13 @@ function renderPage(focus = true) {
 }
 
 async function openProgram(id, hash = location.hash) {
-  const item = await mockActivity.getProgram(id);
+  let item;
+  try {
+    item = await getProgram(id);
+  } catch (error) {
+    if (location.hash === hash) showDetails('프로그램을 불러오지 못했어요', `<p>${escapeText(error.message)}</p>`);
+    return;
+  }
   if (!item || location.hash !== hash) return;
   const canPrepare = !hash.startsWith('#prepare') &&
     !hasProgramApplication(item.programId) &&
