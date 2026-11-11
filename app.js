@@ -7,6 +7,7 @@ import { renderProgramDiscovery } from './pages/program-discovery.js';
 import { mountLanding } from './pages/landing.js';
 import { renderProgramDemo } from './pages/program-demo.js';
 import { renderLogin, renderPasswordReset } from './pages/login.js';
+import { renderSignup } from './pages/signup.js';
 
 import { care, groupOptions, groups, loadSupport, showPanel } from './pages/support-management.js';
 import { renderEligiblePage } from './pages/eligible-programs.js';
@@ -17,6 +18,7 @@ const byId = id => document.getElementById(id);
 const landingPage = byId('landing-page');
 mountLanding(landingPage);
 const isLandingRoute = route => !route || route === 'landing' || route.startsWith('landing-');
+const isAccountRoute = route => route === 'login' || route === 'signup';
 
 function escapeText(value) {
   const element = document.createElement('span');
@@ -161,16 +163,17 @@ function hasProgramApplication(programId, groupId = null) {
 function renderPage(focus = true) {
   const [route, id, group] = location.hash.slice(1).split('/');
   const loginPage = byId('login-page');
-  loginPage.hidden = route !== 'login';
-  if (route === 'login') {
+  loginPage.hidden = !isAccountRoute(route);
+  if (isAccountRoute(route)) {
     landingPage.hidden = true;
     byId('program-demo-page').hidden = true;
     byId('dashboard-sidebar').hidden = true;
     byId('dashboard-main').hidden = true;
     for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
     document.querySelector('#notification-panel:popover-open')?.hidePopover();
-    document.title = id === 'reset' ? '비밀번호 찾기 | Nubi' : '로그인 | Nubi';
-    if (id === 'reset') renderPasswordReset(loginPage);
+    document.title = `${route === 'signup' ? '기관 가입' : id === 'reset' ? '비밀번호 찾기' : '로그인'} | Nubi`;
+    if (route === 'signup') renderSignup(loginPage);
+    else if (id === 'reset') renderPasswordReset(loginPage);
     else renderLogin(loginPage);
     window.scrollTo(0, 0);
     return;
@@ -438,12 +441,16 @@ byId('toggle-theme').addEventListener('click', event => {
   event.currentTarget.setAttribute('aria-pressed', String(dark));
 });
 window.addEventListener('hashchange', () => renderPage());
-if (isLandingRoute(location.hash.slice(1)) || /^#login(?:\/|$)/.test(location.hash)) renderPage(false);
+const isPublicRoute = () => {
+  const [route] = location.hash.slice(1).split('/');
+  return isLandingRoute(route) || isAccountRoute(route);
+};
+if (isPublicRoute()) renderPage(false);
 
 const profileReady = loadProfile().catch(() => {
   byId('profile-organization').textContent = '기관 정보를 불러오지 못했어요';
 });
 Promise.all([loadSupport(), loadActivity(), profileReady]).then(() => {
-  if (!isLandingRoute(location.hash.slice(1)) && !/^#login(?:\/|$)/.test(location.hash)) renderPage();
+  if (!isPublicRoute()) renderPage();
 });
 loadNotifications().catch(error => { byId('notification-error').textContent = error.message; });
