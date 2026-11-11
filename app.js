@@ -436,9 +436,53 @@ byId('toggle-menu').addEventListener('click', event => {
   button.setAttribute('aria-expanded', String(!sidebarContent.hidden));
   button.setAttribute('aria-label', sidebarContent.hidden ? '메뉴 펼치기' : '메뉴 접기');
 });
-byId('toggle-theme').addEventListener('click', event => {
-  const dark = document.documentElement.classList.toggle('dark');
-  event.currentTarget.setAttribute('aria-pressed', String(dark));
+const settingsButton = byId('account-settings');
+const settingsPanel = byId('account-settings-panel');
+function positionSettingsPanel() {
+  const { right, top } = settingsButton.getBoundingClientRect();
+  settingsPanel.style.setProperty('--settings-right', `${document.documentElement.clientWidth - right}px`);
+  settingsPanel.style.setProperty('--settings-bottom', `${document.documentElement.clientHeight - top + 6}px`);
+}
+settingsPanel.addEventListener('beforetoggle', event => {
+  const opening = event.newState === 'open';
+  settingsButton.setAttribute('aria-expanded', String(opening));
+  if (opening) {
+    positionSettingsPanel();
+    window.addEventListener('resize', positionSettingsPanel);
+    window.addEventListener('scroll', positionSettingsPanel, true);
+  } else {
+    window.removeEventListener('resize', positionSettingsPanel);
+    window.removeEventListener('scroll', positionSettingsPanel, true);
+  }
+});
+settingsPanel.addEventListener('click', event => {
+  if (event.target.closest('a')) settingsPanel.hidePopover();
+});
+const withdrawalDialog = byId('withdrawal-dialog');
+const withdrawalActions = withdrawalDialog.querySelector('form');
+let withdrawalTimer;
+byId('open-withdrawal').addEventListener('click', () => {
+  settingsPanel.hidePopover();
+  withdrawalActions.hidden = false;
+  byId('withdrawal-title').hidden = false;
+  withdrawalDialog.showModal();
+});
+byId('confirm-withdrawal').addEventListener('click', () => {
+  withdrawalActions.hidden = true;
+  byId('withdrawal-title').textContent = '탈퇴되었습니다';
+  const currentRoute = location.hash;
+  withdrawalTimer = window.setTimeout(() => {
+    withdrawalDialog.close();
+    if (location.hash === currentRoute) location.hash = 'landing';
+  }, 3000);
+});
+withdrawalDialog.addEventListener('cancel', event => {
+  if (withdrawalActions.hidden) event.preventDefault();
+});
+withdrawalDialog.addEventListener('close', () => {
+  window.clearTimeout(withdrawalTimer);
+  byId('withdrawal-title').textContent = '정말로 탈퇴할까요?';
+  if (!withdrawalActions.hidden) settingsButton.focus();
 });
 window.addEventListener('hashchange', () => renderPage());
 const isPublicRoute = () => {
