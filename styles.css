@@ -61,7 +61,18 @@ nav a[aria-current] { background: #e4e6ea; color: #171d2b; font-weight: 700; }
 .profile > div { min-width: 0; }
 #profile-organization { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile small { display: block; font-size: 11px; }
-.profile svg { width: 18px; height: 18px; margin-left: auto; color: var(--muted); }
+.profile svg { display: block; width: 18px; height: 18px; color: var(--muted); }
+#account-settings { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 8px; }
+#account-settings[aria-expanded="true"] { background: var(--line); }
+.account-settings-panel { position: fixed; inset: auto var(--settings-right, 12px) var(--settings-bottom, 62px) auto; margin: 0; width: 146px; padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: #171d2b; box-shadow: 0 6px 18px rgb(23 29 43 / 12%); }
+.account-settings-panel :is(a, button) { display: block; width: 100%; padding: 9px 12px; border: 0; border-radius: 7px; background: transparent; color: inherit; text-align: left; }
+.account-settings-panel :is(a, button):hover { background: #f2f3f5; }
+.account-settings-panel #open-withdrawal { color: #b03636; }
+.withdrawal-dialog { width: min(380px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: 16px; color: #171d2b; }
+.withdrawal-dialog::backdrop { background: #10152275; }
+.withdrawal-dialog:has(form[hidden]) h2 { text-align: center; }
+.withdrawal-dialog form { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.withdrawal-dialog .withdrawal-confirm { background: #b03636; border-color: transparent; color: white; }
 .avatar { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--blue); color: white; }
 main { margin-left: 230px; padding: 33px clamp(20px, 3vw, 48px) 36px; }
 .page-header, .actions, .card-header, .card-footer { display: flex; align-items: center; gap: 8px; }
