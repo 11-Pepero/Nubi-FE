@@ -221,7 +221,9 @@ function renderPage(focus = true) {
     location.replace('#login');
     return;
   }
-  if (apiEnabled && !applicationProfile.name) loadProfile().catch(showProfileError);
+  if (apiEnabled && loadedMemberId !== getSession()?.memberId) {
+    loadAccountData().then(() => { if (!isPublicRoute()) renderPage(false); });
+  }
   if (wasLanding) window.scrollTo(0, 0);
   const groupAnchor = /^group-\d+$/.test(route);
   const page = Object.hasOwn(pageTitles, route) ? route : 'support';
@@ -525,8 +527,17 @@ if (isPublicRoute()) renderPage(false);
 function showProfileError() {
   byId('profile-organization').textContent = '기관 정보를 불러오지 못했어요';
 }
-const profileReady = loadProfile().catch(showProfileError);
-Promise.all([loadSupport(), loadActivity(), profileReady]).then(() => {
+function showSupportError(error) {
+  byId('support-error').textContent = error.message;
+}
+let loadedMemberId;
+function loadAccountData() {
+  loadedMemberId = getSession()?.memberId;
+  byId('support-error').textContent = '';
+  return Promise.all([loadSupport().catch(showSupportError), loadProfile().catch(showProfileError)]);
+}
+const accountReady = !apiEnabled || getSession() ? loadAccountData() : Promise.resolve();
+Promise.all([accountReady, loadActivity()]).then(() => {
   if (!isPublicRoute()) renderPage();
 });
 loadNotifications().catch(error => { byId('notification-error').textContent = error.message; });
