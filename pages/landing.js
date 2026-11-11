@@ -38,7 +38,7 @@ export function mountLanding(container) {
           <a href="#landing-about">서비스 소개</a>
           <a href="#landing-steps">이용 방법</a>
           <a href="#landing-faq">자주 묻는 질문</a>
-          <button type="button" data-landing-access>로그인</button>
+          <a href="#login">로그인</a>
           <button type="button" class="landing-button" data-landing-access>기관 가입하기</button>
         </nav>
       </header>
