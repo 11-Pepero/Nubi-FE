@@ -1,3 +1,4 @@
+import { notificationApi } from './pages/notifications-api.js';
 import { renderEventEditor, renderEventList } from './pages/event-management.js';
 import { renderEventApplicants } from './pages/event-applicants.js';
 import { renderApplicationStatus } from './pages/application-status.js';
@@ -88,7 +89,7 @@ async function loadProfile() {
 
 async function loadNotifications(page = 0) {
   const [result, count] = await Promise.all([
-    mockActivity.getNotifications({ page }), mockActivity.getUnreadCount(),
+    notificationApi.getNotifications({ page }), notificationApi.getUnreadCount(),
   ]);
   notifications = page ? [...notifications, ...result.content] : result.content;
   unreadCount = count.unreadCount;
@@ -427,7 +428,7 @@ notificationPanel.addEventListener('click', async event => {
   errorMessage.textContent = '';
   try {
     if (readAll) {
-      const result = await mockActivity.readAllNotifications();
+      const result = await notificationApi.readAllNotifications();
       unreadCount = result.unreadCount;
       notifications = notifications.map(item => ({ ...item, read: true }));
       renderNotifications();
@@ -450,10 +451,10 @@ notificationPanel.addEventListener('click', async event => {
       const id = Number(link.dataset.notification);
       const current = notifications.find(item => item.notificationId === id);
       if (!current) return;
-      const item = current.read ? current : await mockActivity.readNotification(id);
+      const item = current.read ? current : await notificationApi.readNotification(id);
       const target = notificationTarget(item);
       notifications = notifications.map(entry => entry.notificationId === id ? item : entry);
-      ({ unreadCount } = await mockActivity.getUnreadCount());
+      ({ unreadCount } = await notificationApi.getUnreadCount());
       renderNotifications();
       notificationPanel.hidePopover();
       if (location.hash === `#${target.page}`) renderPage();
@@ -559,12 +560,16 @@ function showSupportError(error) {
   byId('support-error').textContent = error.message;
 }
 let loadedMemberId;
+function showNotificationError(error) {
+  byId('notification-error').textContent = error.message;
+}
 function loadAccountData() {
   loadedMemberId = getSession()?.memberId;
   byId('support-error').textContent = '';
   const accountRequests = [loadSupport().catch(showSupportError), loadProfile().catch(showProfileError)];
   if (apiEnabled) {
     applicationLoadError = '';
+    accountRequests.push(loadNotifications().catch(showNotificationError));
     accountRequests.push(getApplications().catch(showApplicationError).then(items => { applications = items; }));
   }
   return Promise.all(accountRequests);
@@ -573,4 +578,4 @@ const accountReady = !apiEnabled || getSession() ? loadAccountData() : Promise.r
 Promise.all([accountReady, loadActivity()]).then(() => {
   if (!isPublicRoute()) renderPage();
 });
-loadNotifications().catch(error => { byId('notification-error').textContent = error.message; });
+if (!apiEnabled) loadNotifications().catch(showNotificationError);
