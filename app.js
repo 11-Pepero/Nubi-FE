@@ -1,4 +1,5 @@
 import { notificationApi } from './pages/notifications-api.js';
+import { getAccessibilityMap } from './pages/accessibility-map-api.js';
 import { renderEventEditor, renderEventList } from './pages/event-management.js';
 import { renderEventApplicants } from './pages/event-applicants.js';
 import { renderApplicationStatus } from './pages/application-status.js';
@@ -52,12 +53,13 @@ let notificationTotalPages = 0;
 let notificationBusy = false;
 
 async function loadActivity() {
-  [programs, applications, events, accessibilityMap, eventEditorOptions] = await Promise.all([
+  [programs, applications, events, eventEditorOptions] = await Promise.all([
     getPrograms().catch(error => {
       programLoadError = error.message;
       return [];
-    }), getApplications().catch(showApplicationError), mockActivity.getEvents(), mockActivity.getAccessibilityMap(), mockActivity.getEventEditorOptions(),
+    }), getApplications().catch(showApplicationError), mockActivity.getEvents(), mockActivity.getEventEditorOptions(),
   ]);
+  if (!apiEnabled) accessibilityMap = await mockActivity.getAccessibilityMap();
 }
 
 let applicationProfile = {};
@@ -570,6 +572,7 @@ function loadAccountData() {
   if (apiEnabled) {
     applicationLoadError = '';
     accountRequests.push(loadNotifications().catch(showNotificationError));
+    accountRequests.push(getAccessibilityMap().then(data => { accessibilityMap = data; }).catch(error => { accessibilityMap = { error: error.message }; }));
     accountRequests.push(getApplications().catch(showApplicationError).then(items => { applications = items; }));
   }
   return Promise.all(accountRequests);
